@@ -108,7 +108,7 @@ class JsApi:
     pywebview builds the JS bridge by walking every public attribute of this object recursively. The window
     must therefore live in an underscore attribute: as a public attribute pywebview descends into
     window.native (the WinForms form) and recurses through the .NET object graph forever, which froze the
-    app on start-up in v0.1.0. Keep this class to public *methods* only.
+    app on start-up in Sayısal Tasarım Uzmanı (then TechRAG) 0.1.0. Keep this class to public *methods* only.
     """
 
     def __init__(self):

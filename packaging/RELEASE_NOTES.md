@@ -1,47 +1,41 @@
 ## Süreç Uzmanı — Windows masaüstü uygulaması
 
-### 0.16.1 — Sayısal Tasarım Uzmanı ile aynı bilgisayarda, aynı anda
-İki uygulama aynı bilgisayarda, aynı Windows oturumunda birlikte çalışır ve birbirinin hiçbir şeyini kullanmaz
-(0.16.0'da ayrılan klasörler, tek örnek kilidi ve pencere adlarına ek olarak):
-- **Simgeler üst üste binmez:** Süreç Uzmanı'nın simgesi ilk açılışta sağ altta, Sayısal Tasarım Uzmanı'nın
-  simgesinin hemen solunda belirir (önceden ikisi de aynı köşeye, birbirinin üstüne yerleşiyordu). Sürüklenen
-  simgenin yeri her uygulamada ayrı hatırlanır.
-- **Ortam değişkenleri ayrı:** Süreç Uzmanı `SURECUZMANI_*` değişkenlerini okur (`SURECUZMANI_ORG_SETTINGS`,
-  `SURECUZMANI_LLM__MODEL` …). Sayısal Tasarım Uzmanı için verilen `TECHRAG_*` değişkenleri, örneğin BT'nin grup
-  ilkesiyle dağıttığı `TECHRAG_ORG_SETTINGS`, artık Süreç Uzmanı'na o uygulamanın kurum ayarlarını okutmaz.
-- **Kurum ayarları aynı ağ klasöründe durabilir:** Süreç Uzmanı'nın dosyası `SurecUzmani.kurum-ayarlari.yaml`
-  (Sayısal Tasarım Uzmanı'nınki `kurum-ayarlari.yaml`). Yönetici iki uygulama için aynı klasörü seçse de biri
-  diğerinin ayarlarını okumaz ve üzerine yazmaz.
-- Ortak kütüphane ve kullanım günlüğü klasörlerini iki uygulama için ayrı seçin (README §2.3.1).
-- Doğrulanan: testler (`tests/test_side_by_side.py`: uygulama klasörü, Windows iç adları, `TECHRAG_*` ve
-  `TECHRAG_ORG_SETTINGS`'in okunmaması, aynı klasörde iki kurum ayarı dosyası, simgenin diğerinin solunda ve
-  üzerine binmeden başlaması — 100 % ve 150 % ölçekte). Her biri eski davranışa geri alınınca başarısız oluyor.
-  İki exe gerçek bir Windows makinesinde birlikte denenmedi.
-
-### 0.16.0 — Süreç Uzmanı: yeni ad ve simge
-Süreç Uzmanı, Sayısal Tasarım Uzmanı 0.15.3'ün kaynak kodundan başlatıldı; arama, cevaplama, doğrulama ve arayüz
-aynen devralındı. Bu sürümde değişenler:
+### 0.1.0 — ilk sürüm
+Süreç Uzmanı'nın ilk sürümü. Sayısal Tasarım Uzmanı 0.15.3'ün kaynak kodundan başlatıldı; arama, cevaplama,
+doğrulama ve arayüz aynen devralındı.
 - **Ad:** pencere başlığı, simge menüsü, iletiler ve belgeler **Süreç Uzmanı**. Dosyalar: `SurecUzmani-portable.exe`
   ve `SurecUzmani-win64.zip` (içinde `SurecUzmani.exe`); Görev Yöneticisi ve dosya özellikleri uygulamayı
   "Süreç Uzmanı" olarak gösterir.
 - **Simge:** "Yapay Zeka Asistanları" menüsündeki Süreç Uzmanı simgesi: kömür grisi daire üzerinde bronz döngü okları
   ve onay işaretli bir pano. Masaüstündeki simge ve exe'nin simgesi (Dosya Gezgini, görev çubuğu, pencere başlığı,
   bildirimler) bu resimdir (`techrag/resources/surec.png`).
-- **Sayısal Tasarım Uzmanı'ndan ayrı çalışır:** ayarlar, API anahtarları, kütüphane, sohbetler ve günlük
-  `SurecUzmani` klasörlerinde tutulur (`%APPDATA%\SurecUzmani`, `%USERPROFILE%\SurecUzmani\library`). Sayısal
-  Tasarım Uzmanı'nın klasörleri (`SayisalTasarimUzmani`, eski `TechRAG`) kullanılmaz. Tek örnek kilidi, simge
-  penceresi ve etkinleştirme iletisi de uygulamanın kendi adını taşır: iki uygulama aynı bilgisayarda birlikte
-  çalışır, birini açmak diğerinin penceresini öne getirmez.
+- **Sayısal Tasarım Uzmanı ile aynı bilgisayarda, aynı anda çalışır** ve onun hiçbir şeyini kullanmaz (README §2.3.1):
+  - Ayarlar, API anahtarları, kütüphane, sohbetler ve günlük `SurecUzmani` klasörlerinde
+    (`%APPDATA%\SurecUzmani`, `%USERPROFILE%\SurecUzmani\library`); Sayısal Tasarım Uzmanı'nın klasörleri
+    (`SayisalTasarimUzmani`, eski `TechRAG`) kullanılmaz.
+  - Tek örnek kilidi, simge penceresi ve "sohbeti aç" iletisi uygulamanın kendi adını taşır: birini açmak
+    diğerinin penceresini öne getirmez.
+  - Simge ilk açılışta sağ altta, Sayısal Tasarım Uzmanı'nın simgesinin hemen solunda belirir; ikisi üst üste
+    binmez. Sürüklenen simgenin yeri her uygulamada ayrı hatırlanır.
+  - Ortam değişkenleri `SURECUZMANI_*` (`SURECUZMANI_ORG_SETTINGS`, `SURECUZMANI_LLM__MODEL` …). Sayısal Tasarım
+    Uzmanı için verilen `TECHRAG_*` değişkenleri, BT'nin grup ilkesiyle dağıttığı `TECHRAG_ORG_SETTINGS` dahil,
+    okunmaz.
+  - Kurum ayarları dosyası `SurecUzmani.kurum-ayarlari.yaml` (Sayısal Tasarım Uzmanı'nınki `kurum-ayarlari.yaml`):
+    iki uygulamanın kurum ayarları aynı ağ klasöründe durabilir, biri diğerininkini okumaz ve üzerine yazmaz.
+  - Ortak kütüphane ve kullanım günlüğü klasörlerini iki uygulama için ayrı seçin.
 - Konu alanları, örnek soru setleri ve cevap kuralları henüz Sayısal Tasarım Uzmanı'ndaki gibidir (donanım arayüz
   standartları); süreç dokümanlarına uyarlama sonraki sürümlerde.
-- Doğrulanan: testler (uygulama klasörünün yalnızca `SurecUzmani` olması, Sayısal Tasarım Uzmanı ve `TechRAG`
-  klasörleri varken bile; Windows iç adlarının `SurecUzmani.` ile başlaması; pencere başlığı ve simge iletilerinde
-  yeni ad; simgenin 256 px'te dosyadaki resimle birebir aynı olması, saydam köşeler, opak daire, .ico biçimi).
-  Gerçek bir Windows makinesinde denenmedi.
+- Doğrulanan: testler (`tests/test_side_by_side.py`: uygulama klasörü, Windows iç adları, `TECHRAG_*` ve
+  `TECHRAG_ORG_SETTINGS`'in okunmaması, aynı klasörde iki kurum ayarı dosyası, simgenin diğerinin solunda ve
+  üzerine binmeden başlaması — 100 % ve 150 % ölçekte; her biri eski davranışa geri alınınca başarısız oluyor;
+  pencere başlığı ve simge iletilerinde yeni ad; simgenin 256 px'te dosyadaki resimle birebir aynı olması, .ico
+  biçimi). İki exe gerçek bir Windows makinesinde birlikte denenmedi.
 
 ---
 
-## Önceki sürümler (Sayısal Tasarım Uzmanı olarak)
+## Sayısal Tasarım Uzmanı'nın sürüm geçmişi (Süreç Uzmanı'nın temeli, 0.1.0 – 0.15.3)
+
+Aşağıdaki sürümler Sayısal Tasarım Uzmanı'na aittir; Süreç Uzmanı'nın sürüm numaraları bunlardan bağımsızdır.
 
 ### 0.15.3 — "Yapay Zeka Asistanları" menüsüyle aynı renkler ve simge
 (0.15.2 yayınlanmadı; değişiklikleri bu sürümdedir.)

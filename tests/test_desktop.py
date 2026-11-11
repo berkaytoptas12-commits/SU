@@ -490,8 +490,9 @@ def _pywebview_walk(obj, base="", functions=None, seen=None, depth=0):
 
 
 def test_js_api_bridge_does_not_descend_into_the_window():
-    """Regression for v0.1.0: the window was a public JsApi attribute, so pywebview walked into the WinForms
-    form (window.native.AccessibilityObject.Bounds.Empty.Empty...) and the app hung on start-up."""
+    """Regression for TechRAG (Sayısal Tasarım Uzmanı) 0.1.0: the window was a public JsApi attribute, so pywebview
+    walked into the WinForms form (window.native.AccessibilityObject.Bounds.Empty.Empty...) and the app hung on
+    start-up."""
 
     class Rect:  # like System.Drawing.Rectangle: every .Empty access returns a new object
         @property
@@ -514,7 +515,7 @@ def test_js_api_bridge_does_not_descend_into_the_window():
     public_data = [n for n in dir(api) if not n.startswith("_") and not callable(getattr(api, n))]
     assert public_data == [], "JsApi must not have public data attributes (pywebview walks them)"
 
-    class Old(desktop.JsApi):  # the v0.1.0 layout reproduces the runaway walk
+    class Old(desktop.JsApi):  # the TechRAG 0.1.0 layout reproduces the runaway walk
         def __init__(self):
             super().__init__()
             self.window = Window()
