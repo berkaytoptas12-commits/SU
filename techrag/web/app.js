@@ -1,5 +1,5 @@
 "use strict";
-// Sayısal Tasarım Uzmanı - desktop UI. Offline: no external libraries, no requests except to this app's own /api.
+// Süreç Uzmanı - desktop UI. Offline: no external libraries, no requests except to this app's own /api.
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -301,7 +301,7 @@ const I18N = {
     tocClose: "İçindekileri kapat (Ctrl+B)",
     srcCollapse: "Daralt / genişlet", tocShow: "İçindekiler (aç / kapat, Ctrl+B)", tocResize: "İçindekiler genişliğini ayarla (sürükleyin; ←/→; çift tık: varsayılan)",
     orgTitle: "Kurum ayarları", orgFolder: "Kaydedileceği klasör (ağ klasörü; ör. ortak kütüphane klasörü)",
-    orgHint: "Kayıtlı ayarlarınız (model sunucuları ve modeller, cevaplama ve gelişmiş ayarlar, bağlantı güvenliği, ortak kütüphane klasörü, kullanım günlüğü klasörü) bu klasöre kurum-ayarlari.yaml olarak yazılır. API anahtarı ve kişisel klasörler yazılmaz. Exe'nin yanına da bu klasörü gösteren SayisalTasarimUzmani.kurum.txt bırakılır: exe'yi bu dosyayla birlikte verdiğiniz kullanıcılar ayarları buradan alır, yalnızca API anahtarlarını girer. Kurum ayarları varsayılandır, kullanıcı değiştirebilir. Önce yukarıdaki ayarları kaydedin.",
+    orgHint: "Kayıtlı ayarlarınız (model sunucuları ve modeller, cevaplama ve gelişmiş ayarlar, bağlantı güvenliği, ortak kütüphane klasörü, kullanım günlüğü klasörü) bu klasöre kurum-ayarlari.yaml olarak yazılır. API anahtarı ve kişisel klasörler yazılmaz. Exe'nin yanına da bu klasörü gösteren SurecUzmani.kurum.txt bırakılır: exe'yi bu dosyayla birlikte verdiğiniz kullanıcılar ayarları buradan alır, yalnızca API anahtarlarını girer. Kurum ayarları varsayılandır, kullanıcı değiştirebilir. Önce yukarıdaki ayarları kaydedin.",
     orgReadOnly: "Diğer kullanıcılar ortak kütüphaneyi salt-okunur açsın", orgSave: "Kurum ayarlarını kaydet",
     orgNone: "Kurum ayarı kullanılmıyor.", orgFrom: "Kurum ayarları: {0}", orgFromCached: "Kurum ayarları: {0} (klasöre ulaşılamadı; son okunan kopya kullanılıyor)",
     orgFromError: "Kurum ayarları okunamadı: {0}", orgSrc_pointer: "exe'nin yanındaki dosyadan", orgSrc_user: "ilk açılışta verilen klasörden",
@@ -312,8 +312,8 @@ const I18N = {
     orgSet_embedding_base_url: "embedding sunucusu", orgSet_reranker_model: "reranker modeli", orgSet_reranker_base_url: "reranker sunucusu",
     orgSet_usage_log_dir: "kullanım günlüğü klasörü",
     orgSaved: "Kaydedildi: {0}", orgPointer: "Exe'nin yanına {0} yazıldı. Exe'yi dağıtırken bu dosyayı da verin (zip sürümünde klasörün içinde kalır).",
-    orgPointerFailed: "Exe'nin yanına işaretçi dosyası yazılamadı ({0}). Exe'nin yanına SayisalTasarimUzmani.kurum.txt adında bir dosya koyup içine şu satırı yazın: {1}",
-    orgPointerDev: "Uygulama exe olarak çalışmadığı için işaretçi dosyası yazılmadı. Exe'nin yanına SayisalTasarimUzmani.kurum.txt koyup içine şu satırı yazın: {0}",
+    orgPointerFailed: "Exe'nin yanına işaretçi dosyası yazılamadı ({0}). Exe'nin yanına SurecUzmani.kurum.txt adında bir dosya koyup içine şu satırı yazın: {1}",
+    orgPointerDev: "Uygulama exe olarak çalışmadığı için işaretçi dosyası yazılmadı. Exe'nin yanına SurecUzmani.kurum.txt koyup içine şu satırı yazın: {0}",
     orgLibraryLocal: "Uyarı: ortak kütüphane yolu yerel görünüyor ({0}); diğer bilgisayarlar bu yola erişemeyebilir. Ağ yolunu kullanın (\\\\sunucu\\paylasim\\...).",
     orgAskTitle: "Kurum ayarları", orgAskText: "Uygulama henüz ayarlanmamış. Kurumunuz ayarları ortak bir klasörde tutuyorsa o klasörü girin (yöneticinizden öğrenebilirsiniz; ör. \\\\sunucu\\paylasim\\library). Sunucular, modeller ve ortak kütüphane oradan gelir; siz yalnızca API anahtarınızı girersiniz.",
     orgAskUse: "Kullan", orgAskNone: "Kurum ayarı kullanmıyorum", orgAskBad: "Bu klasörde kurum-ayarlari.yaml bulunamadı.",
@@ -628,7 +628,7 @@ const I18N = {
     tocClose: "Hide the contents (Ctrl+B)",
     srcCollapse: "Collapse / expand", tocShow: "Contents (show / hide, Ctrl+B)", tocResize: "Resize the contents (drag; ←/→; double click: default)",
     orgTitle: "Organization settings", orgFolder: "Folder to save them to (a network folder; e.g. the shared library's)",
-    orgHint: "Your saved settings (model servers and models, answering and advanced settings, connection security, the shared library folder, the usage log folder) are written into this folder as kurum-ayarlari.yaml. Never the API key or personal folders. Next to the exe, SayisalTasarimUzmani.kurum.txt pointing to this folder is left: users you give the exe with this file get the settings from here and only enter their API key. Organization settings are defaults; users can change them. Save the settings above first.",
+    orgHint: "Your saved settings (model servers and models, answering and advanced settings, connection security, the shared library folder, the usage log folder) are written into this folder as kurum-ayarlari.yaml. Never the API key or personal folders. Next to the exe, SurecUzmani.kurum.txt pointing to this folder is left: users you give the exe with this file get the settings from here and only enter their API key. Organization settings are defaults; users can change them. Save the settings above first.",
     orgReadOnly: "Other users open the shared library read-only", orgSave: "Save organization settings",
     orgNone: "No organization settings in use.", orgFrom: "Organization settings: {0}", orgFromCached: "Organization settings: {0} (folder not reachable; the copy read last time is used)",
     orgFromError: "Organization settings could not be read: {0}", orgSrc_pointer: "from the file next to the exe", orgSrc_user: "from the folder given at first start",
@@ -639,8 +639,8 @@ const I18N = {
     orgSet_embedding_base_url: "embedding server", orgSet_reranker_model: "reranker model", orgSet_reranker_base_url: "reranker server",
     orgSet_usage_log_dir: "usage log folder",
     orgSaved: "Saved: {0}", orgPointer: "{0} was written next to the exe. Hand it out with the exe (in the zip version it stays in the folder).",
-    orgPointerFailed: "The pointer file could not be written next to the exe ({0}). Put a file named SayisalTasarimUzmani.kurum.txt next to the exe with this line in it: {1}",
-    orgPointerDev: "The app does not run as an exe, so no pointer file was written. Put SayisalTasarimUzmani.kurum.txt next to the exe with this line in it: {0}",
+    orgPointerFailed: "The pointer file could not be written next to the exe ({0}). Put a file named SurecUzmani.kurum.txt next to the exe with this line in it: {1}",
+    orgPointerDev: "The app does not run as an exe, so no pointer file was written. Put SurecUzmani.kurum.txt next to the exe with this line in it: {0}",
     orgLibraryLocal: "Note: the shared library path looks local ({0}); other computers may not reach it. Use the network path (\\\\server\\share\\...).",
     orgAskTitle: "Organization settings", orgAskText: "The app is not set up yet. If your organization keeps its settings in a shared folder, enter that folder (ask your administrator; e.g. \\\\server\\share\\library). The servers, models and shared library come from there; you only enter your API key.",
     orgAskUse: "Use", orgAskNone: "I do not use organization settings", orgAskBad: "No kurum-ayarlari.yaml in this folder.",

@@ -1,10 +1,10 @@
-"""Desktop entry point (SayisalTasarimUzmani.exe - "Sayısal Tasarım Uzmanı").
+"""Desktop entry point (SurecUzmani.exe - "Süreç Uzmanı").
 
 * No arguments: start the FastAPI backend in-process on localhost with a per-launch token. On Windows the app then
   shows a small round launcher icon (techrag.launcher); a click on it opens the chat window - the same UI in a native
   window (Microsoft Edge WebView2 through pywebview). No browser is opened. A second start of the exe brings the
   running one forward instead of starting another backend.
-* With arguments: behave exactly like the `techrag` CLI (e.g. `SayisalTasarimUzmani.exe ingest`, `... doctor`).
+* With arguments: behave exactly like the `techrag` CLI (e.g. `SurecUzmani.exe ingest`, `... doctor`).
 
 (`techrag` stays the name of the Python package, CLI and TECHRAG_* variables; users see APP_TITLE.)
 """
@@ -45,8 +45,7 @@ def _attach_console() -> None:
 
 
 def _log_file() -> Path:
-    """SayisalTasarimUzmani.log next to settings.json (%APPDATA%\\SayisalTasarimUzmani, or the existing
-    %APPDATA%\\TechRAG folder of an installation from before the rename)."""
+    """SurecUzmani.log next to settings.json (%APPDATA%\\SurecUzmani)."""
     from techrag.settings import settings_path
 
     d = settings_path().parent

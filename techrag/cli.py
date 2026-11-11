@@ -1,4 +1,4 @@
-"""Command line: techrag <command> ...   (the desktop exe accepts the same commands: SayisalTasarimUzmani.exe ingest ...)"""
+"""Command line: techrag <command> ...   (the desktop exe accepts the same commands: SurecUzmani.exe ingest ...)"""
 
 from __future__ import annotations
 

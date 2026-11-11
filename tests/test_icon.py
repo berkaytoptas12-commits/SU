@@ -1,4 +1,4 @@
-"""The app's icon: the shared bronze circuit-board disc (techrag/resources/sayisal-tasarim.png), decoded and scaled
+"""The app's icon: the shared Süreç Uzmanı disc (techrag/resources/surec.png), decoded and scaled
 without an image library, written as a valid Windows .ico at build time."""
 
 import struct
@@ -46,7 +46,7 @@ def test_the_icon_is_the_bronze_disc_with_transparent_corners():
     opaque = big[big[..., 3] == 255]
     dark = opaque[opaque[..., :3].max(axis=1) < 70]
     bronze = opaque[(opaque[..., 0] > 150) & (opaque[..., 0] > opaque[..., 2] + 40)]
-    assert len(dark) > len(bronze) > 0.1 * len(opaque), "bronze traces on a charcoal disc"
+    assert len(dark) > len(bronze) > 0.1 * len(opaque), "bronze arrows and clipboard on a charcoal disc"
 
 
 def test_the_full_size_icon_is_the_shipped_picture_unchanged():

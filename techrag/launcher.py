@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from techrag.config import APP_TITLE, write_text_atomic
+from techrag.config import APP_NAME, APP_TITLE, write_text_atomic
 
 log = logging.getLogger("techrag.launcher")
 
@@ -35,14 +35,16 @@ SIZE_DIP = 60        # icon window edge in device-independent pixels (the disc)
 MARGIN_DIP = 16      # default distance from the work-area edges (bottom-right corner)
 DRAG_DIP = 4         # a press that moves farther than this is a drag, not a click
 IDM_OPEN, IDM_SETTINGS, IDM_QUIT = 1001, 1002, 1003
-# Internal names keep the former "TechRAG" prefix on purpose: an older build still running is detected as the same app.
-ACTIVATE_MESSAGE = "TechRAG.Launcher.Activate"
+# Internal Windows names (mutex, window class, activation message) carry this app's own name, so a running Sayısal
+# Tasarım Uzmanı (built from the same source, internal prefix "TechRAG") is never taken for this app or woken by it.
+INTERNAL_PREFIX = APP_NAME
+ACTIVATE_MESSAGE = f"{INTERNAL_PREFIX}.Launcher.Activate"
 
 TEXTS = {
     "tr": {
         "open": "Sohbeti aç", "settings": "Ayarlar", "quit": "Uygulamadan çık",
         "hint_title": f"{APP_TITLE} çalışmaya devam ediyor",
-        "hint": (f"Pencere gizlendi; {APP_TITLE} ekrandaki mikroçip simgesi olarak çalışmaya devam ediyor. Sohbet, "
+        "hint": (f"Pencere gizlendi; {APP_TITLE} ekrandaki simgesi olarak çalışmaya devam ediyor. Sohbet, "
                  "seçili bucket'lar, açık PDF ve süren indeksleme olduğu gibi korunur.\n\nSohbeti yeniden açmak için "
                  "simgeye tıklayın; sohbet öndeyken simgeye tıklamak onu yeniden gizler. Uygulamadan tamamen çıkmak "
                  "için simgeye sağ tıklayıp \u201cUygulamadan çık\u201d seçeneğini kullanın."),
@@ -57,7 +59,7 @@ TEXTS = {
     "en": {
         "open": "Open chat", "settings": "Settings", "quit": "Quit",
         "hint_title": f"{APP_TITLE} keeps running",
-        "hint": (f"The window was hidden; {APP_TITLE} keeps running as the microchip icon on your screen. The chat, "
+        "hint": (f"The window was hidden; {APP_TITLE} keeps running as its icon on your screen. The chat, "
                  "the selected buckets, the open PDF and any indexing in progress are kept as they are.\n\nClick the "
                  "icon to open the chat again; clicking it while the chat is in front hides it again. To quit "
                  "completely, right-click the icon and choose \u201cQuit\u201d."),
@@ -210,7 +212,7 @@ class PressTracker:
 
 # ------------------------------------------------------------------------------------------- drawing
 def render_icon(size: int, hover: bool = False) -> bytes:
-    """Premultiplied BGRA pixels (top-down) of the launcher: the app's icon (techrag.icon - the bronze circuit-board
+    """Premultiplied BGRA pixels (top-down) of the launcher: the app's icon (techrag.icon - the Süreç Uzmanı
     disc shared with the department's "Yapay Zeka Asistanları" launcher), scaled to the monitor's pixel size. The
     corners are fully transparent (click-through); the disc is opaque, so all of it is the click target. Hover lifts
     the picture a little towards white."""
@@ -632,7 +634,7 @@ class SingleInstance:
         if os.name != "nt":
             return True
         a = win32()
-        handle = a.CreateMutexW(None, False, f"Local\\TechRAG.{self.key}")
+        handle = a.CreateMutexW(None, False, f"Local\\{INTERNAL_PREFIX}.{self.key}")
         err = a.ctypes.get_last_error()
         if not handle:
             log.warning("single-instance mutex unavailable (error %s): starting anyway", err)
@@ -729,7 +731,7 @@ class Launcher:
 
     @staticmethod
     def class_name(key: str) -> str:
-        return f"TechRAG.Launcher.{key}"
+        return f"{INTERNAL_PREFIX}.Launcher.{key}"
 
     # -------------------------------------------------------------- called from other threads
     def start(self, timeout: float = 10.0) -> bool:

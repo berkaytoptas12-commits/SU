@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reference: serving the four endpoints Sayısal Tasarım Uzmanı uses with vLLM inside the closed network.
+# Reference: serving the four endpoints Süreç Uzmanı uses with vLLM inside the closed network.
 # Flags change between vLLM releases and model families -- check `vllm serve --help` and each model card.
 # The app only needs OpenAI-compatible endpoints; any of these can live on separate GPUs/servers.
 set -euo pipefail

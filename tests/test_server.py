@@ -17,7 +17,7 @@ def client(cfg, engine, tmp_path, monkeypatch):
 
 def test_ui_info_and_documents(client):
     r = client.get("/")
-    assert r.status_code == 200 and "Sayısal Tasarım Uzmanı" in r.text and "TechRAG" not in r.text
+    assert r.status_code == 200 and "Süreç Uzmanı" in r.text and "TechRAG" not in r.text
     assert r.headers["cache-control"] == "no-cache", "the page is revalidated after an update"
     assert client.get("/static/app.js").headers["cache-control"] == "no-cache"
     info = client.get("/api/info").json()

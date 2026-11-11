@@ -1,5 +1,5 @@
-"""The app's icon: the bronze circuit-board disc of the Sayısal Tasarım Uzmanı, shared with the department's
-"Yapay Zeka Asistanları" launcher (techrag/resources/sayisal-tasarim.png, 256 x 256, transparent corners).
+"""The app's icon: the Süreç Uzmanı disc (bronze cycle arrows around a checked clipboard on charcoal), shared with
+the department's "Yapay Zeka Asistanları" launcher (techrag/resources/surec.png, 256 x 256, transparent corners).
 
 The same picture is the round launcher icon on the desktop (techrag.launcher.render_icon) and the exe's Windows .ico
 (Explorer, taskbar, title bar, notifications), written at build time by packaging/techrag.spec. The PNG is decoded and
@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
-ICON_FILE = "sayisal-tasarim.png"
+ICON_FILE = "surec.png"
 
 
 def decode_png(data: bytes) -> np.ndarray:

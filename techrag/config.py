@@ -23,9 +23,8 @@ from typing import Any, Optional
 import yaml
 
 DEFAULT_CONFIG_PATH = Path("config/config.yaml")
-APP_TITLE = "Sayısal Tasarım Uzmanı"   # the product name shown to users
-APP_NAME = "SayisalTasarimUzmani"      # file and folder names (ASCII: safe in paths, archives and release assets)
-LEGACY_APP_NAME = "TechRAG"           # the former name: folders created under it keep being used
+APP_TITLE = "Süreç Uzmanı"   # the product name shown to users
+APP_NAME = "SurecUzmani"     # file and folder names (ASCII: safe in paths, archives and release assets)
 
 log = logging.getLogger("techrag.config")
 
@@ -43,11 +42,10 @@ def write_text_atomic(path: Path, text: str | bytes) -> None:
 
 
 def app_dir(base: Path, lower: bool = False) -> Path:
-    """<base>/<app folder>. A folder made before the rename (TechRAG) is used as long as it exists and no new one
-    does, so settings, API keys, the library and the window state are found exactly where they were."""
-    new = Path(base) / (APP_NAME.lower() if lower else APP_NAME)
-    old = Path(base) / (LEGACY_APP_NAME.lower() if lower else LEGACY_APP_NAME)
-    return old if old.is_dir() and not new.exists() else new
+    """<base>/<app folder>: only this app's own folder. Süreç Uzmanı started from the Sayısal Tasarım Uzmanı source;
+    that app's folders (SayisalTasarimUzmani, or TechRAG from before its rename) are never adopted, so the two apps
+    keep separate settings, API keys, libraries, chats and single-instance locks and run side by side."""
+    return Path(base) / (APP_NAME.lower() if lower else APP_NAME)
 
 
 def same_path(a: str | Path, b: str | Path) -> bool:

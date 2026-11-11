@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Build:  pyinstaller packaging/techrag.spec --noconfirm   -> dist/SayisalTasarimUzmani/SayisalTasarimUzmani.exe
-#         set TECHRAG_ONEFILE=1 && pyinstaller packaging/techrag.spec  -> dist/SayisalTasarimUzmani-portable.exe
+# Build:  pyinstaller packaging/techrag.spec --noconfirm   -> dist/SurecUzmani/SurecUzmani.exe
+#         set TECHRAG_ONEFILE=1 && pyinstaller packaging/techrag.spec  -> dist/SurecUzmani-portable.exe
 # File names are ASCII (safe in paths, zip archives and GitHub release assets); Windows shows the product name
-# "Sayısal Tasarım Uzmanı" from the version resource (Task Manager, file properties).
+# "Süreç Uzmanı" from the version resource (Task Manager, file properties).
 import os
 import re
 
@@ -39,8 +39,8 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-NAME = "SayisalTasarimUzmani"
-TITLE = "Sayısal Tasarım Uzmanı"
+NAME = "SurecUzmani"
+TITLE = "Süreç Uzmanı"
 with open(os.path.join(ROOT, "techrag", "__init__.py"), encoding="utf-8") as fh:
     VERSION = re.search(r'__version__ = "([^"]+)"', fh.read()).group(1)
 nums = tuple(int(x) for x in re.findall(r"\d+", VERSION)[:4]) + (0,) * 4
@@ -63,7 +63,7 @@ with open(VERSION_FILE, "w", encoding="utf-8-sig") as fh:  # BOM: PyInstaller ho
 )
 """)
 
-# The app's icon (techrag/resources/sayisal-tasarim.png, also the launcher icon) as the exe's .ico (Explorer,
+# The app's icon (techrag/resources/surec.png, also the launcher icon) as the exe's .ico (Explorer,
 # taskbar, title bar, notifications), written by techrag.icon at build time.
 import sys
 

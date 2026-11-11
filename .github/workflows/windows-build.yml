@@ -49,18 +49,18 @@ jobs:
       - name: Self-test the frozen builds
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist/SayisalTasarimUzmani/SayisalTasarimUzmani.exe -ArgumentList "selftest","selftest-onedir.json" -Wait -PassThru
+          $p = Start-Process -FilePath dist/SurecUzmani/SurecUzmani.exe -ArgumentList "selftest","selftest-onedir.json" -Wait -PassThru
           Get-Content selftest-onedir.json
           if ($p.ExitCode -ne 0) { throw "onedir selftest failed" }
-          $p = Start-Process -FilePath dist/SayisalTasarimUzmani-portable.exe -ArgumentList "selftest","selftest-onefile.json" -Wait -PassThru
+          $p = Start-Process -FilePath dist/SurecUzmani-portable.exe -ArgumentList "selftest","selftest-onefile.json" -Wait -PassThru
           Get-Content selftest-onefile.json
           if ($p.ExitCode -ne 0) { throw "onefile selftest failed" }
           $j = Get-Content selftest-onedir.json | ConvertFrom-Json
           if ($j.pywebview -ne $true) { throw "pywebview not bundled: $($j.pywebview)" }
-          foreach ($exe in @("dist/SayisalTasarimUzmani/SayisalTasarimUzmani.exe", "dist/SayisalTasarimUzmani-portable.exe")) {
+          foreach ($exe in @("dist/SurecUzmani/SurecUzmani.exe", "dist/SurecUzmani-portable.exe")) {
             $v = (Get-Item $exe).VersionInfo
             Write-Host "$exe : $($v.FileDescription) / $($v.ProductName) $($v.ProductVersion)"
-            if ($v.ProductName -ne "Sayısal Tasarım Uzmanı") { throw "$exe has no product name in its version resource" }
+            if ($v.ProductName -ne "Süreç Uzmanı") { throw "$exe has no product name in its version resource" }
           }
       - name: GUI smoke test (launcher icon -> chat window, both builds)
         # techrag.desktop._smoke drives the real windows: the icon appears first and the chat window is hidden; a
@@ -71,8 +71,8 @@ jobs:
         # menu must end the process by itself.
         shell: pwsh
         run: |
-          $log = Join-Path $env:APPDATA "SayisalTasarimUzmani/SayisalTasarimUzmani.log"
-          foreach ($exe in @("dist/SayisalTasarimUzmani/SayisalTasarimUzmani.exe", "dist/SayisalTasarimUzmani-portable.exe")) {
+          $log = Join-Path $env:APPDATA "SurecUzmani/SurecUzmani.log"
+          foreach ($exe in @("dist/SurecUzmani/SurecUzmani.exe", "dist/SurecUzmani-portable.exe")) {
             $name = [IO.Path]::GetFileNameWithoutExtension($exe)
             $out = Join-Path $PWD "smoke-$name.json"
             $env:TECHRAG_SMOKE = $out
@@ -97,13 +97,13 @@ jobs:
           Remove-Item Env:TECHRAG_SMOKE
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path dist/SayisalTasarimUzmani -DestinationPath SayisalTasarimUzmani-win64.zip
+        run: Compress-Archive -Path dist/SurecUzmani -DestinationPath SurecUzmani-win64.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: SayisalTasarimUzmani-windows
+          name: SurecUzmani-windows
           path: |
-            SayisalTasarimUzmani-win64.zip
-            dist/SayisalTasarimUzmani-portable.exe
+            SurecUzmani-win64.zip
+            dist/SurecUzmani-portable.exe
           retention-days: 30
       - name: Publish GitHub Release (tag push or manual run with release_tag)
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
@@ -111,8 +111,8 @@ jobs:
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          name: Sayısal Tasarım Uzmanı ${{ inputs.release_tag || github.ref_name }}
+          name: Süreç Uzmanı ${{ inputs.release_tag || github.ref_name }}
           body_path: packaging/RELEASE_NOTES.md
           files: |
-            SayisalTasarimUzmani-win64.zip
-            dist/SayisalTasarimUzmani-portable.exe
+            SurecUzmani-win64.zip
+            dist/SurecUzmani-portable.exe

@@ -537,12 +537,20 @@ def test_backend_port_is_the_same_at_every_start():
     taken.close()
 
 
-def test_former_app_folders_keep_being_used(tmp_path):
+def test_the_app_folder_is_its_own_never_the_sayisal_tasarim_uzmani_ones(tmp_path):
     from techrag.config import app_dir
 
-    assert app_dir(tmp_path).name == "SayisalTasarimUzmani", "new installations"
-    (tmp_path / "TechRAG").mkdir()
-    assert app_dir(tmp_path).name == "TechRAG", "settings, keys and library stay where they were"
-    (tmp_path / "SayisalTasarimUzmani").mkdir()
-    assert app_dir(tmp_path).name == "SayisalTasarimUzmani"
-    assert app_dir(tmp_path, lower=True).name == "sayisaltasarimuzmani"
+    assert app_dir(tmp_path).name == "SurecUzmani"
+    assert app_dir(tmp_path, lower=True).name == "surecuzmani"
+    for other in ("SayisalTasarimUzmani", "TechRAG", "sayisaltasarimuzmani", "techrag"):
+        (tmp_path / other).mkdir()
+    assert app_dir(tmp_path).name == "SurecUzmani", "settings, keys and library are not shared with the other app"
+    assert app_dir(tmp_path, lower=True).name == "surecuzmani"
+
+
+def test_internal_windows_names_differ_from_sayisal_tasarim_uzmani():
+    from techrag import launcher as L
+
+    names = [L.ACTIVATE_MESSAGE, L.Launcher.class_name("k")]
+    assert all(n.startswith("SurecUzmani.") for n in names), names
+    assert "TechRAG" not in " ".join(names)

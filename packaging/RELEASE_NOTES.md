@@ -1,4 +1,29 @@
-## Sayısal Tasarım Uzmanı — Windows masaüstü uygulaması
+## Süreç Uzmanı — Windows masaüstü uygulaması
+
+### 0.16.0 — Süreç Uzmanı: yeni ad ve simge
+Süreç Uzmanı, Sayısal Tasarım Uzmanı 0.15.3'ün kaynak kodundan başlatıldı; arama, cevaplama, doğrulama ve arayüz
+aynen devralındı. Bu sürümde değişenler:
+- **Ad:** pencere başlığı, simge menüsü, iletiler ve belgeler **Süreç Uzmanı**. Dosyalar: `SurecUzmani-portable.exe`
+  ve `SurecUzmani-win64.zip` (içinde `SurecUzmani.exe`); Görev Yöneticisi ve dosya özellikleri uygulamayı
+  "Süreç Uzmanı" olarak gösterir.
+- **Simge:** "Yapay Zeka Asistanları" menüsündeki Süreç Uzmanı simgesi: kömür grisi daire üzerinde bronz döngü okları
+  ve onay işaretli bir pano. Masaüstündeki simge ve exe'nin simgesi (Dosya Gezgini, görev çubuğu, pencere başlığı,
+  bildirimler) bu resimdir (`techrag/resources/surec.png`).
+- **Sayısal Tasarım Uzmanı'ndan ayrı çalışır:** ayarlar, API anahtarları, kütüphane, sohbetler ve günlük
+  `SurecUzmani` klasörlerinde tutulur (`%APPDATA%\SurecUzmani`, `%USERPROFILE%\SurecUzmani\library`). Sayısal
+  Tasarım Uzmanı'nın klasörleri (`SayisalTasarimUzmani`, eski `TechRAG`) kullanılmaz. Tek örnek kilidi, simge
+  penceresi ve etkinleştirme iletisi de uygulamanın kendi adını taşır: iki uygulama aynı bilgisayarda birlikte
+  çalışır, birini açmak diğerinin penceresini öne getirmez.
+- Konu alanları, örnek soru setleri ve cevap kuralları henüz Sayısal Tasarım Uzmanı'ndaki gibidir (donanım arayüz
+  standartları); süreç dokümanlarına uyarlama sonraki sürümlerde.
+- Doğrulanan: testler (uygulama klasörünün yalnızca `SurecUzmani` olması, Sayısal Tasarım Uzmanı ve `TechRAG`
+  klasörleri varken bile; Windows iç adlarının `SurecUzmani.` ile başlaması; pencere başlığı ve simge iletilerinde
+  yeni ad; simgenin 256 px'te dosyadaki resimle birebir aynı olması, saydam köşeler, opak daire, .ico biçimi).
+  Gerçek bir Windows makinesinde denenmedi.
+
+---
+
+## Önceki sürümler (Sayısal Tasarım Uzmanı olarak)
 
 ### 0.15.3 — "Yapay Zeka Asistanları" menüsüyle aynı renkler ve simge
 (0.15.2 yayınlanmadı; değişiklikleri bu sürümdedir.)
@@ -672,15 +697,20 @@ eşleşmeyen tabloyu okuma yardımı olarak veriyor. Doğrulama kuralı gevşeti
 - Tarayıcıyla indirilen zip'ten çıkarılan DLL'lerin "internetten indirildi" işareti açılışta kaldırılıyor
   (.NET'in bu dosyaları yüklemeyi reddetmesini önler).
 
-Arayüz ve tasarım standartları (ARINC, DDR, PCIe, Ethernet, DisplayPort, USB, RS-422, I²C, genel) için
-kaynaklara bağlı, cevabı göstermeden önce doğrulayan asistan. Modeller kurum içi vLLM / SGLang
+---
+
+## Süreç Uzmanı hakkında
+
+Yüklü dokümanlara bağlı, cevabı göstermeden önce doğrulayan asistan (konu alanları şimdilik Sayısal Tasarım
+Uzmanı'ndan devralınan arayüz ve tasarım standartları: ARINC, DDR, PCIe, Ethernet, DisplayPort, USB, RS-422, I²C,
+genel). Modeller kurum içi vLLM / SGLang
 (OpenAI uyumlu) sunucularından kullanılır; exe içinde model yoktur.
 
 ### İndirme
 | Dosya | Ne zaman |
 |---|---|
-| `SayisalTasarimUzmani-portable.exe` | Tek dosya, kopyala-çalıştır (ilk açılış birkaç saniye sürer) |
-| `SayisalTasarimUzmani-win64.zip` | Klasör sürümü, daha hızlı açılır — zip'i açıp `SayisalTasarimUzmani\SayisalTasarimUzmani.exe` çalıştırın |
+| `SurecUzmani-portable.exe` | Tek dosya, kopyala-çalıştır (ilk açılış birkaç saniye sürer) |
+| `SurecUzmani-win64.zip` | Klasör sürümü, daha hızlı açılır — zip'i açıp `SurecUzmani\SurecUzmani.exe` çalıştırın |
 
 ### Gereksinimler
 - Windows 10/11 x64, **Microsoft Edge WebView2 Runtime** (Windows 11'de hazır; Windows 10'da yoksa
@@ -688,7 +718,7 @@ kaynaklara bağlı, cevabı göstermeden önce doğrulayan asistan. Modeller kur
 - Erişilebilir vLLM uç noktaları: sohbet (tool calling açık), isteğe bağlı ayrı görsel model, embedding, reranker.
 
 ### İlk adımlar
-1. `SayisalTasarimUzmani.exe` açılınca ekranın sağ altında mikroçip simgesi belirir; tıklayınca sohbet penceresi
+1. `SurecUzmani.exe` açılınca ekranın sağ altında Süreç Uzmanı simgesi belirir; tıklayınca sohbet penceresi
    açılır. **Ayarlar**: üstteki ortak API anahtarını girin; her servis için API adresi (`http://sunucu:8000/v1`) ve
    modeli açılır listeden seçin, **Test et**.
 2. **Admin › Ortak kütüphane › Belge klasörü ekle**: belgelerinizin ana klasörünü seçin; alt klasörler bucket olur,
@@ -696,16 +726,16 @@ kaynaklara bağlı, cevabı göstermeden önce doğrulayan asistan. Modeller kur
    **Kişisel › Dosya seç…**.
 3. Soru sorun; cevap yanlış veya eksikse 👎 ile doğru değeri ve sayfasını ekleyin. **Admin › Değerlendirme**
    sekmesinden örnek seti veya kendi soru dosyanızı çalıştırabilirsiniz. Komut satırı da aynı exe ile çalışır:
-   `SayisalTasarimUzmani.exe doctor`, `... rescan`, `... quality`, `... docs`, `... eval`.
+   `SurecUzmani.exe doctor`, `... rescan`, `... quality`, `... docs`, `... eval`.
 
-Kütüphane varsayılan olarak `%USERPROFILE%\SayisalTasarimUzmani\library` altındadır; ayarlar
-`%APPDATA%\SayisalTasarimUzmani\settings.json` (eski `TechRAG` klasörleri varsa onlar kullanılır).
+Kütüphane varsayılan olarak `%USERPROFILE%\SurecUzmani\library` altındadır; ayarlar
+`%APPDATA%\SurecUzmani\settings.json` (Sayısal Tasarım Uzmanı'nın klasörlerinden ayrı).
 Ayrıntılar: depodaki `README.md`.
 
 ### Bilinen sınırlamalar
 - Testler sahte bir OpenAI uyumlu sunucu ve üretilmiş PDF'lerle yapıldı; gerçek model sunucularına ve gerçek
   standart PDF'lerine karşı doğruluk ölçülmedi. VLM tablo eşiği ve rerank ayarlarının kendi dokümanlarınızla
-  (Değerlendirme penceresi, "yalnızca erişim" veya `SayisalTasarimUzmani.exe eval --retrieval-only`)
+  (Değerlendirme penceresi, "yalnızca erişim" veya `SurecUzmani.exe eval --retrieval-only`)
   ayarlanması gerekir. Kaynaklara bağlı doğruluk
   garanti edilmez; doğrulama yanlışların bir kısmını yakalar.
 - Exe imzasızdır; Windows SmartScreen ilk açılışta uyarı verebilir ("Daha fazla bilgi → Yine de çalıştır").

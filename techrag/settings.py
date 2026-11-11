@@ -1,5 +1,5 @@
-"""Per-user settings written by the desktop Settings dialog (%APPDATA%/SayisalTasarimUzmani/settings.json; an
-existing %APPDATA%/TechRAG folder from before the rename keeps being used).
+"""Per-user settings written by the desktop Settings dialog (%APPDATA%/SurecUzmani/settings.json; never
+shared with Sayısal Tasarım Uzmanı, whose folders are not used).
 
 One API key is used for every model server (section "auth"); keys saved per service by older versions are moved
 there on the next save. API keys are encrypted with Windows DPAPI (bound to the Windows user account) when

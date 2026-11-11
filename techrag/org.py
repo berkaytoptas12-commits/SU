@@ -6,7 +6,7 @@ folder (usually the shared library's folder), so that the exe can be handed to o
   usage log folder go into <folder>/kurum-ayarlari.yaml. Never the API key (each user enters it once; it is stored
   encrypted for that user) and never personal folders.
 * Found, in this order: the TECHRAG_ORG_SETTINGS environment variable (IT can set it), a one-line pointer file next
-  to the exe (SayisalTasarimUzmani.kurum.txt, written when the settings are saved, handed out with the exe), or the
+  to the exe (SurecUzmani.kurum.txt, written when the settings are saved, handed out with the exe), or the
   folder the user gave when the app asked once at first start.
 * Applied as defaults: built-in defaults < organization settings < the user's own settings < environment. Nothing is
   locked; a user's own settings file keeps only what differs from the organization settings, so a later change of
@@ -36,7 +36,7 @@ from techrag.config import Config, write_text_atomic
 log = logging.getLogger("techrag.org")
 
 ORG_FILE = "kurum-ayarlari.yaml"
-POINTER_FILE = "SayisalTasarimUzmani.kurum.txt"
+POINTER_FILE = "SurecUzmani.kurum.txt"
 CACHE_FILE = "kurum-ayarlari.cache.yaml"
 
 # What the organization file holds: whole sections, minus the keys listed (secrets and per-user paths).
@@ -199,7 +199,7 @@ def export(cfg: Config, others_read_only: bool = True) -> dict:
     return out
 
 
-HEADER = """# Sayısal Tasarım Uzmanı - kurum ayarları ({when})
+HEADER = """# Süreç Uzmanı - kurum ayarları ({when})
 # Bu dosyadaki değerler her kullanıcı için varsayılandır; kullanıcı kendi bilgisayarında değiştirebilir.
 # API anahtarı ve kişisel klasörler burada tutulmaz. Admin › Ayarlar › "Kurum ayarlarını kaydet" ile yazılır.
 """

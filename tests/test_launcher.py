@@ -134,7 +134,7 @@ def test_instance_key_and_texts():
     assert set(L.TEXTS["tr"]) == set(L.TEXTS["en"])
     assert L.text("tr", "quit") == "Uygulamadan çık" and L.text("tr", "open") == "Sohbeti aç"
     assert L.text("tr", "settings") == "Ayarlar" and L.text("de", "quit") == "Quit"
-    assert all("Sayısal Tasarım Uzmanı" in L.text(lang, "hint") for lang in ("tr", "en"))
+    assert all("Süreç Uzmanı" in L.text(lang, "hint") for lang in ("tr", "en"))
 
 
 def test_single_instance_is_a_no_op_off_windows():

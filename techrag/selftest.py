@@ -1,4 +1,4 @@
-"""Self-test for packaged builds (`SayisalTasarimUzmani.exe selftest result.json`): exercises PDF parsing, indexing,
+"""Self-test for packaged builds (`SurecUzmani.exe selftest result.json`): exercises PDF parsing, indexing,
 retrieval, the bundled web UI/resources and the API without any model server."""
 
 from __future__ import annotations

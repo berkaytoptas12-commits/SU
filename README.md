@@ -1,4 +1,10 @@
-# Sayısal Tasarım Uzmanı — Arayüz ve Tasarım Standartları için Doğrulamalı Asistan
+# Süreç Uzmanı — Kaynağa Dayalı, Doğrulamalı Doküman Asistanı
+
+> Süreç Uzmanı, Sayısal Tasarım Uzmanı'nın (STU 0.15.3) kaynak kodundan başlatıldı. Adı, simgesi ve uygulama
+> klasörleri ayrıdır; iki uygulama aynı bilgisayarda birlikte çalışır. Konu alanları
+> (`techrag/resources/domains.yaml`), örnek soru setleri ve cevap kuralları henüz Sayısal Tasarım Uzmanı'ndaki
+> gibidir (donanım arayüz standartları); aşağıdaki anlatım ve örnekler de onlara göredir. Süreç dokümanlarına
+> uyarlama sonraki sürümlerde yapılacak.
 
 Kullanıcının arayüz/standart sorularını (ARINC, JEDEC DDR, PCIe, Ethernet, DisplayPort, USB, RS-422, I²C,
 genel tasarım standartları …) **yalnızca yüklü dokümanlardan** cevaplayan, her ifadeyi **[n] atfıyla kaynağına**
@@ -9,7 +15,7 @@ cümleyi / tablo hücresini **PDF sayfası üzerinde vurgulayan** bir masaüstü
 göstermez. Bu, hatasızlık garantisi değildir — denetimler yanlışların bir kısmını yakalar, bir kısmı kaçabilir
 (bkz. "Bilinen sınırlar"). Doğruluk ancak kendi dokümanlarınızla, uzman onaylı bir soru setiyle ölçülebilir (§5).
 
-* Windows için tek `SayisalTasarimUzmani.exe` (tarayıcı açılmaz; yerel pencere — Microsoft Edge WebView2).
+* Windows için tek `SurecUzmani.exe` (tarayıcı açılmaz; yerel pencere — Microsoft Edge WebView2).
 * Tüm modeller kurum içindeki **vLLM / SGLang** sunucularından (OpenAI uyumlu API) kullanılır:
   sohbet modeli, görsel model, embedding ve reranker ayrı ayrı ayarlanır. Yerelde ağır hiçbir şey çalışmaz.
 * Arayüz Türkçe / İngilizce (tek tıkla değişir). Cevap, sorunun dilinde verilir; teknik terimler İngilizce kalır.
@@ -103,13 +109,13 @@ ayarlarıdır; uygulamadan açılamaz.
 
 ### 2.1 Exe'yi almak
 
-GitHub Actions her push'ta Windows derlemesi yapar (**Actions → Build Windows exe → Artifacts → SayisalTasarimUzmani-windows**):
+GitHub Actions her push'ta Windows derlemesi yapar (**Actions → Build Windows exe → Artifacts → SurecUzmani-windows**):
 
-* `SayisalTasarimUzmani-portable.exe` — tek dosya, kopyala-çalıştır.
-* `SayisalTasarimUzmani-win64.zip` — klasör sürümü (daha hızlı açılır; `SayisalTasarimUzmani.exe` içinde).
+* `SurecUzmani-portable.exe` — tek dosya, kopyala-çalıştır.
+* `SurecUzmani-win64.zip` — klasör sürümü (daha hızlı açılır; `SurecUzmani.exe` içinde).
 
 `v*` etiketi atılırsa (ör. `git tag v1.0.0 && git push --tags`) dosyalar GitHub Release'e de eklenir.
-Derleme, dondurulmuş exe üzerinde `SayisalTasarimUzmani.exe selftest` çalıştırarak PDF ayrıştırma, indeksleme, arama,
+Derleme, dondurulmuş exe üzerinde `SurecUzmani.exe selftest` çalıştırarak PDF ayrıştırma, indeksleme, arama,
 gömülü arayüz ve pywebview'in pakete girdiğini doğrular. Exe'yi kapalı ağa normal dosya olarak taşıyın.
 Derleme, kütüphanelerin `packaging/constraints.txt` dosyasında sabitlenmiş sürümleriyle yapılır (v0.14.2'nin
 derlendiği ve test edildiği sürümler): bir kütüphanenin yeni sürümü exe'yi depoda hiçbir şey değişmeden değiştiremez.
@@ -192,17 +198,18 @@ anahtarlar ilk kayıtta ortak anahtara taşınır (sohbet modelininki esas alın
   aralık denetiminden geçer. VLM eşiği veya sayfa sınırı değişirse belgeler bir sonraki taramada yeniden işlenir
   (daha önce okunan sayfalar önbellekten gelir).
 
-Ayarlar `%APPDATA%\SayisalTasarimUzmani\settings.json` dosyasına yazılır; API anahtarları **Windows DPAPI** ile kullanıcı
+Ayarlar `%APPDATA%\SurecUzmani\settings.json` dosyasına yazılır; API anahtarları **Windows DPAPI** ile kullanıcı
 hesabına bağlı şifrelenir.
 
-**Eski adla (TechRAG) kurulmuş bir bilgisayarda** `%APPDATA%\TechRAG` (ayarlar, API anahtarları, günlük, pencere
-durumu) ve `%USERPROFILE%\TechRAG\library` (varsayılan kütüphane) klasörleri varsa olduğu gibi kullanılmaya devam
-eder; hiçbir şey taşınmaz veya silinmez. Yeni kurulumlar `SayisalTasarimUzmani` adlı klasörleri kullanır. Python
-paketi (`techrag`), komut satırı adı ve `TECHRAG_*` ortam değişkenleri uyumluluk için teknik ad olarak kaldı.
+Süreç Uzmanı yalnızca kendi `SurecUzmani` klasörlerini kullanır: aynı bilgisayardaki Sayısal Tasarım Uzmanı'nın
+klasörleri (`SayisalTasarimUzmani`, eski `TechRAG`) okunmaz ve değiştirilmez. Ayarlar, API anahtarları, kütüphane,
+sohbetler ve günlük iki uygulamada ayrıdır; tek örnek kilidi de ayrı olduğundan birini açmak diğerinin penceresini
+öne getirmez. Python paketi (`techrag`), komut satırı adı ve `TECHRAG_*` ortam değişkenleri teknik ad olarak kaldı
+(ortam değişkenleri iki uygulamada aynı adı taşır).
 
 ### 2.4 Kurum ayarları (exe'yi başkalarına verirken)
 
-Ayarlar her Windows kullanıcısının kendi profilinde (`%APPDATA%\SayisalTasarimUzmani\settings.json`) tutulur; exe'yi
+Ayarlar her Windows kullanıcısının kendi profilinde (`%APPDATA%\SurecUzmani\settings.json`) tutulur; exe'yi
 başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak bir ağ klasörüne** kaydedilir:
 
 1. Kendi bilgisayarınızda her şeyi ayarlayıp kaydedin (Ayarlar ve Admin › Ayarlar), ortak kütüphaneyi ağ yolundan
@@ -212,7 +219,7 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
    ayarlar, bağlantı güvenliği, ortak kütüphane klasörü (ve **diğer kullanıcıların onu salt-okunur açması**,
    varsayılan işaretli), kullanım günlüğü klasörü. **API anahtarı ve kişisel klasörler yazılmaz.** Dosya yarım
    kalmayacak şekilde yazılır; o klasöre yazma izniniz olmalıdır.
-3. Aynı anda exe'nin yanına bu klasörü gösteren `SayisalTasarimUzmani.kurum.txt` bırakılır. Exe'yi dağıtırken bu
+3. Aynı anda exe'nin yanına bu klasörü gösteren `SurecUzmani.kurum.txt` bırakılır. Exe'yi dağıtırken bu
    dosyayı da verin: zip sürümünde klasörün içinde kalır; portable exe'yi bu dosyayla aynı klasörde verin; exe ağ
    klasöründen çalıştırılıyorsa bir şey yapmanız gerekmez. Exe'nin klasörüne yazılamıyorsa uygulama dosyanın adını
    ve içine yazılacak satırı söyler.
@@ -239,7 +246,7 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
 * **Yeni ayarlar uygulama yeniden başlayınca okunur.** Sohbet penceresinin ✕ düğmesi uygulamadan çıkmaz, exe'ye yeniden
   çift tıklamak da çalışan uygulamayı öne getirir; tam çıkış: simgeye sağ tık → **Uygulamadan çık**.
 * **Bulunma sırası:** `TECHRAG_ORG_SETTINGS` ortam değişkeni (BT grup ilkesiyle verebilir; klasör veya dosya yolu) →
-  exe'nin yanındaki `SayisalTasarimUzmani.kurum.txt` → ilk açılışta verilen klasör. Hiçbiri yoksa ve uygulama hiç
+  exe'nin yanındaki `SurecUzmani.kurum.txt` → ilk açılışta verilen klasör. Hiçbiri yoksa ve uygulama hiç
   ayarlanmamışsa ilk açılışta bir kez "Kurum ayarları nerede?" diye sorulur ("Kurum ayarı kullanmıyorum" da
   seçilebilir).
 * **Ağ klasörüne ulaşılamazsa** (ör. dizüstü ağ dışında) son okunan kopya kullanılır ve üst şeritte belirtilir.
@@ -249,7 +256,7 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
 Ağ klasöründeki bir indeks SQLite tarafından sayfa sayfa (4 KB) ağ üzerinden okunur; her yeni soru anahtar kelime
 dizininin başka bölümlerini okuduğu için arama yerelde saniyeler sürerken ağda dakikalar sürebiliyordu. Ortak kütüphane
 **salt-okunur ve bir ağ klasöründen** (UNC yolu veya ağ sürücüsü) açıldığında uygulama indeksin (`index.sqlite`) bir
-kopyasını bu bilgisayara (`%LOCALAPPDATA%\SayisalTasarimUzmani\cache\mirror\…`) alır ve aramayı oradan yapar.
+kopyasını bu bilgisayara (`%LOCALAPPDATA%\SurecUzmani\cache\mirror\…`) alır ve aramayı oradan yapar.
 Belgeler (PDF'ler) ağda kalır; bir sayfa yalnızca görüntülenirken okunur.
 
 * **Kopyalama:** büyük bloklarla, tek seferde (ağda hızlı yol). Kopya kullanılmadan önce denetlenir: kopyalanırken
@@ -394,7 +401,7 @@ işlenmez (mevcut tablolar korunur), yeni/değişen belgelere ve yeniden indeksl
 └── cache\vlm\        (VLM ve meta veri sonuçları; aynı sayfa ikinci kez ücretlendirilmez)
 ```
 
-* Varsayılan konum `%USERPROFILE%\SayisalTasarimUzmani\library`; **Admin › Ortak kütüphane** sekmesinden değiştirilir.
+* Varsayılan konum `%USERPROFILE%\SurecUzmani\library`; **Admin › Ortak kütüphane** sekmesinden değiştirilir.
 * **Doküman ekle** (Admin › Ortak kütüphane): koleksiyon adı + dosyalar → `sources\<koleksiyon>` içine kopyalanır ve
   indekslenir. Aynı adlı farklı bir dosya varsa `Ad (2).pdf` olarak kaydedilir.
 * Dosya adına standart ve sürümü yazmak etiketlemeyi kesinleştirir (`JESD79-5B_DDR5.pdf`, `PCIe_Base_5.0.pdf`).
@@ -412,7 +419,7 @@ kütüphanede rapor "mevcut değil" der.
 **Eski sürümle indekslenmiş kütüphane (0.1.x):** açılışta şema yerinde güncellenir; eski sürümün sayfa
 düzeyi kontrolle "doğrulanmış" saydığı parametre satırları ve VLM tabloları güvenilmez kabul edilir (cevapta
 kullanılmaz). Arayüzde uyarı çıkar. **Admin › Ortak kütüphane → "Konum verisini oluştur (hızlı geçiş)"** (veya
-`SayisalTasarimUzmani.exe migrate`) kaynak PDF'lerden sayfa geometrisini çıkarır ve önbellekteki VLM tablolarını hücre
+`SurecUzmani.exe migrate`) kaynak PDF'lerden sayfa geometrisini çıkarır ve önbellekteki VLM tablolarını hücre
 düzeyinde yeniden doğrular — **yeniden embedding ve VLM çağrısı yapmaz**. Eski sürüm, doğrulanan VLM tablosunun
 orijinal PDF metnini indekse koymuyordu; hücre düzeyinde doğrulanamayan bu tür tablolar için geçiş raporu tam
 yeniden indeksleme önerir (`ingest --rebuild`: VLM sonuçları önbellekten gelir, yalnızca embedding yeniden
@@ -433,7 +440,7 @@ Sol paneldeki **Kişisel** bölümü her kullanıcının kendi dosyaları içind
 ortak kütüphane salt-okunur açılmış olsa da çalışır.
 
 * **Dosya seç…** ile bilgisayarınızdan dosya seçersiniz. Dosyalar **kişisel klasörünüze kopyalanır** (varsayılan
-  `%USERPROFILE%\SayisalTasarimUzmani\Kisisel`; "değiştir" ile istediğiniz klasörü seçin) ve o klasörün içindeki
+  `%USERPROFILE%\SurecUzmani\Kisisel`; "değiştir" ile istediğiniz klasörü seçin) ve o klasörün içindeki
   ayrı bir kişisel indekste (`<kişisel klasör>\_indeks`) indekslenir. Doğrudan klasördeki dosyalar **Kişisel**
   bucket'ında, klasöre elle açtığınız alt klasörler kendi kişisel bucket'larında görünür; klasöre elle
   kopyaladığınız veya sildiğiniz dosyalar **Yeniden indeksle** ile işlenir.
@@ -503,7 +510,7 @@ her şey burada toplanır):
   Excel'de doğrudan açılır) eklenir. **Cevap metni yazılmaz.** Klasör bir ağ klasörü olabilir: her bilgisayar yalnızca
   kendi kullanıcısının dosyasına ekleme yaptığı için kullanıcılar birbirinin dosyasına yazmaz. Klasöre
   yazılamazsa (ağ kapalı) kayıt yerel ayarlar klasörüne (`usage_local`) yazılır ve Admin'de uyarı görünür.
-  Sekmede kullanıcı başına soru ve token toplamları özetlenir. Varsayılan klasör `%APPDATA%\SayisalTasarimUzmani\usage`;
+  Sekmede kullanıcı başına soru ve token toplamları özetlenir. Varsayılan klasör `%APPDATA%\SurecUzmani\usage`;
   günlük kapatılabilir.
 
 ---
@@ -512,9 +519,9 @@ her şey burada toplanır):
 
 ### Açılış: sohbet simgesi
 
-* `SayisalTasarimUzmani.exe` açılınca önce ekranın sağ alt köşesinde (görev çubuğunun üstünde) küçük bir
-  **simge** belirir: kömür grisi bir daire üzerinde bronz devre yolları ve via'lar, "Yapay Zeka Asistanları"
-  menüsündeki Sayısal Tasarım Uzmanı simgesiyle aynı (`techrag/resources/sayisal-tasarim.png`; uygulamanın içinde
+* `SurecUzmani.exe` açılınca önce ekranın sağ alt köşesinde (görev çubuğunun üstünde) küçük bir
+  **simge** belirir: kömür grisi bir daire üzerinde bronz döngü okları ve onay işaretli bir pano, "Yapay Zeka
+  Asistanları" menüsündeki Süreç Uzmanı simgesiyle aynı (`techrag/resources/surec.png`; uygulamanın içinde
   her monitörün ölçeğine küçültülür, internetten bir şey indirilmez, köşeleri saydamdır). Exe'nin simgesi de budur. Simge normal pencerelerin üzerinde kalır ama klavye odağını
   almaz; yazdığınız uygulama odakta kalır. Ayrı bir tarayıcı açılmaz.
 * **Sol tık sohbet penceresini açar/gizler:** pencere gizliyse gösterilip öne alınır; görünür ve öndeyse
@@ -533,9 +540,9 @@ her şey burada toplanır):
   genişlikleri korunur; süren indeksleme arka planda devam eder. Gizliyken arayüz ilerleme sorgulamaz.
 * **Tamamen çıkmak** için simgeye sağ tıklayıp "Uygulamadan çık". İndeksleme sürüyorsa onay istenir; o an
   yazılan belge kaydı tamamlanır, sonraki belgeler bir sonraki "Yeniden tara"da işlenir (indeks yarım kalmaz).
-* `SayisalTasarimUzmani.exe` ikinci kez çalıştırılırsa yeni bir arka uç başlatılmaz; çalışan uygulamanın sohbet penceresi öne
+* `SurecUzmani.exe` ikinci kez çalıştırılırsa yeni bir arka uç başlatılmaz; çalışan uygulamanın sohbet penceresi öne
   gelir. Uygulama Windows başlangıcına eklenmez.
-* Simgenin yeri ve tek seferlik bilgiler `%APPDATA%\SayisalTasarimUzmani\desktop.json` dosyasındadır (silinirse simge
+* Simgenin yeri ve tek seferlik bilgiler `%APPDATA%\SurecUzmani\desktop.json` dosyasındadır (silinirse simge
   varsayılan köşeye döner).
 
 ### Sohbet penceresi
@@ -551,7 +558,7 @@ her şey burada toplanır):
   listeler (başlık = ilk soru, tarih, soru sayısı); birine tıklayınca cevaplar, atıflar, doğrulama kutusu ve PDF
   vurgularıyla birlikte açılır, oradan devam edilebilir. Her soru, sonuçlandığında (cevap, netleştirme, hata veya
   durdurma) o sohbete kaydedilir. Sohbetler yalnızca bu bilgisayarda, kullanıcının kendi ayarlar klasöründe
-  (`%APPDATA%\SayisalTasarimUzmani\chats`) tutulur; ortak kütüphaneye ve kullanım günlüğüne yazılmaz. 🗑 ile tek tek,
+  (`%APPDATA%\SurecUzmani\chats`) tutulur; ortak kütüphaneye ve kullanım günlüğüne yazılmaz. 🗑 ile tek tek,
   "Tümünü sil" ile hepsi silinir.
 * **Kaynaklar sekmesi:** iki bölümdür: **Ortak** (ortak kütüphanenin bucket'ları) ve **Kişisel** (kendi
   dosyalarınız; bkz. 3.5). Belgeler bucket başlıkları altında gruplanır; bucket'lar başlangıçta kapalıdır,
@@ -604,7 +611,7 @@ her şey burada toplanır):
   Dipnot işaretli değerler "295⁽1⁾" (295, dipnot 1), on üzeri gösterimler "10^-12" olarak yazılır.
 * **Geri bildirim:** her cevabın altında 👍 (doğru/faydalı, hemen kaydedilir) ve 👎 (yanlış/eksik). 👎 kısa bir
   form açar: doğru değer, birim, parametre, belge, sayfa, not ve "belgeler bu soruyu cevaplamıyor". Kayıtlar
-  yalnızca bu bilgisayarda kullanıcı klasöründe (`%APPDATA%\SayisalTasarimUzmani\feedback.json`) tutulur;
+  yalnızca bu bilgisayarda kullanıcı klasöründe (`%APPDATA%\SurecUzmani\feedback.json`) tutulur;
   kütüphaneye yazılmaz (salt okunur paylaşılan kütüphanede de çalışır). Kaynak metni, kütüphane yolu, sunucu
   adresi veya anahtar saklanmaz. **Admin › Değerlendirme** sekmesinden aday değerlendirme maddeleri olarak dışa
   aktarılabilir.
@@ -648,22 +655,22 @@ hem ekran (0–1, döndürme/CropBox uygulanmış) hem PDF kullanıcı uzayı ko
 ### Komut satırı (aynı exe)
 
 ```bat
-SayisalTasarimUzmani.exe doctor                    :: uç noktalar, modeller, indeks kontrolü
-SayisalTasarimUzmani.exe models                    :: her uç noktanın sunduğu modeller
-SayisalTasarimUzmani.exe ingest                    :: artımlı indeksleme (VLM tablo çıkarımı dahil)
-SayisalTasarimUzmani.exe ingest --rebuild          :: embedding modeli değişince / eski indeksin tam yenilenmesi
-SayisalTasarimUzmani.exe migrate                   :: eski (0.1.x) indeksi yerinde güncelle (embedding/VLM çağrısı yok)
-SayisalTasarimUzmani.exe add-folder D:\Teknik_Belgeler --preview   :: bucket'ları ve sayıları göster
-SayisalTasarimUzmani.exe add-folder D:\Teknik_Belgeler             :: belge klasörünü ekle ve indeksle (yerinde okunur)
-SayisalTasarimUzmani.exe rescan                    :: kütüphaneyi ve tüm belge klasörlerini yeniden tara
-SayisalTasarimUzmani.exe purge-missing             :: kaynağı silinmiş belgeleri indeksten kaldır
-SayisalTasarimUzmani.exe quality [--all]           :: indeksleme kalite raporu (son çalıştırma, sorunlu belgeler)
-SayisalTasarimUzmani.exe retry                     :: başarısız işlemleri yeniden dene (mümkünse yalnız başarısız sayfalar)
-SayisalTasarimUzmani.exe inspect dosya.pdf --table-pages   :: parçalama ve VLM'e gidecek sayfalar
-SayisalTasarimUzmani.exe search "DDR5 tRFC 16Gb"   :: yalnızca arama (kapsam, pasajlar, parametre satırları)
-SayisalTasarimUzmani.exe ask "PCIe 5.0 LTSSM Polling alt durumları?"
-SayisalTasarimUzmani.exe publish \\sunucu\paylasim\kutuphane-2026-10
-SayisalTasarimUzmani.exe eval                     :: değerlendirme (gömülü örnek set; kendi dosyanız: eval sorular.yaml)
+SurecUzmani.exe doctor                    :: uç noktalar, modeller, indeks kontrolü
+SurecUzmani.exe models                    :: her uç noktanın sunduğu modeller
+SurecUzmani.exe ingest                    :: artımlı indeksleme (VLM tablo çıkarımı dahil)
+SurecUzmani.exe ingest --rebuild          :: embedding modeli değişince / eski indeksin tam yenilenmesi
+SurecUzmani.exe migrate                   :: eski (0.1.x) indeksi yerinde güncelle (embedding/VLM çağrısı yok)
+SurecUzmani.exe add-folder D:\Teknik_Belgeler --preview   :: bucket'ları ve sayıları göster
+SurecUzmani.exe add-folder D:\Teknik_Belgeler             :: belge klasörünü ekle ve indeksle (yerinde okunur)
+SurecUzmani.exe rescan                    :: kütüphaneyi ve tüm belge klasörlerini yeniden tara
+SurecUzmani.exe purge-missing             :: kaynağı silinmiş belgeleri indeksten kaldır
+SurecUzmani.exe quality [--all]           :: indeksleme kalite raporu (son çalıştırma, sorunlu belgeler)
+SurecUzmani.exe retry                     :: başarısız işlemleri yeniden dene (mümkünse yalnız başarısız sayfalar)
+SurecUzmani.exe inspect dosya.pdf --table-pages   :: parçalama ve VLM'e gidecek sayfalar
+SurecUzmani.exe search "DDR5 tRFC 16Gb"   :: yalnızca arama (kapsam, pasajlar, parametre satırları)
+SurecUzmani.exe ask "PCIe 5.0 LTSSM Polling alt durumları?"
+SurecUzmani.exe publish \\sunucu\paylasim\kutuphane-2026-10
+SurecUzmani.exe eval                     :: değerlendirme (gömülü örnek set; kendi dosyanız: eval sorular.yaml)
 ```
 
 Kaynak koddan: `pip install -r requirements-desktop.txt` → `python -m techrag.desktop` (pencere) veya
@@ -686,7 +693,7 @@ yüklenebilir.
 soru), **geri bildirimden aday maddeler** veya **kendi `.yaml` dosyanız**; "yalnızca erişim" seçeneği model
 cevabı üretmeden recall@k/MRR ölçer. Sonuç tablosunda her oran **pay/payda** ile gösterilir ("1/1, %100");
 paydası 0 olan oran "ölçülmedi" yazar (0 sayılmaz). Raporlar kullanıcı klasörüne
-(`%APPDATA%\SayisalTasarimUzmani\eval_reports`) kaydedilir ve pencerede listelenir; kütüphaneye yazılmaz, hata
+(`%APPDATA%\SurecUzmani\eval_reports`) kaydedilir ve pencerede listelenir; kütüphaneye yazılmaz, hata
 metinlerinden sunucu adresi ve anahtarlar silinir. Aynı anda bir değerlendirme çalışır; uygulama kapanırken
 durur. Aynı pencerede geri bildirim özeti ve **aday maddeleri dışa aktar (.yaml)** bulunur: 👍 verilen cevaptaki
 değerler beklenen anahtar kelimeler, 👎 ile girilen doğru değer (parametre verildiyse olgu) olur; maddeler
@@ -694,8 +701,8 @@ değerler beklenen anahtar kelimeler, 👎 ile girilen doğru değer (parametre 
 benchmark sayılmaz. 👎 verilip doğru değer girilmeyen kayıt madde üretmez.
 
 ```bat
-SayisalTasarimUzmani.exe eval --retrieval-only     :: LLM'siz: recall@1/3/5/8, MRR (doğru doküman/sayfa geldi mi?)
-SayisalTasarimUzmani.exe eval                      :: + cevap metrikleri
+SurecUzmani.exe eval --retrieval-only     :: LLM'siz: recall@1/3/5/8, MRR (doğru doküman/sayfa geldi mi?)
+SurecUzmani.exe eval                      :: + cevap metrikleri
 ```
 
 Soru şeması (örnek set: `techrag/resources/eval/questions.yaml`, exe'nin içinde gömülü; ayrıntı
@@ -718,7 +725,7 @@ kamuya açık bilgilerdir ama sizin doküman revizyonlarınıza karşı kontrol 
 uzman tarafından kontrol edilmiş (`status: expert_verified`) birkaç yüz soruluk bir set hazırlayın; önce
 **recall@k** (ayrıştırma, parçalama, VLM sayfa eşiği `vision.min_page_score`, rerank aday sayısı), sonra
 hatalı cevap ve cevap vermeme oranlarını izleyin. Yanlış cevapların kökü çoğunlukla ayrıştırma veya
-standart/sürüm etiketlemesindedir: `SayisalTasarimUzmani.exe docs` ve `inspect` ile kontrol edin.
+standart/sürüm etiketlemesindedir: `SurecUzmani.exe docs` ve `inspect` ile kontrol edin.
 
 Testler (`tests/`) sentetik PDF'ler ve sahte bir OpenAI uyumlu sunucuyla çalışır: mekanizmaları (kapsam,
 doğrulama, hücre eşleştirme, konum, geçiş) sınar, gerçek bir modelin doğruluğunu **ölçmez**.
@@ -727,10 +734,10 @@ doğrulama, hücre eşleştirme, konum, geçiş) sınar, gerçek bir modelin do�
 
 | Belirti | Çözüm |
 |---|---|
-| Pencere açılmıyor | WebView2 Runtime kurulu mu? Günlük: `%APPDATA%\SayisalTasarimUzmani\SayisalTasarimUzmani.log` |
-| Simge görünmüyor / tıklayınca bir şey olmuyor | Uygulama zaten çalışıyor olabilir: `SayisalTasarimUzmani.exe`'yi yeniden çalıştırmak sohbeti öne getirir. Simgenin yerini sıfırlamak için uygulamadan çıkıp `%APPDATA%\SayisalTasarimUzmani\desktop.json` dosyasını silin. Simge oluşturulamazsa sohbet penceresi doğrudan açılır (günlükte nedeni yazar). |
+| Pencere açılmıyor | WebView2 Runtime kurulu mu? Günlük: `%APPDATA%\SurecUzmani\SurecUzmani.log` |
+| Simge görünmüyor / tıklayınca bir şey olmuyor | Uygulama zaten çalışıyor olabilir: `SurecUzmani.exe`'yi yeniden çalıştırmak sohbeti öne getirir. Simgenin yerini sıfırlamak için uygulamadan çıkıp `%APPDATA%\SurecUzmani\desktop.json` dosyasını silin. Simge oluşturulamazsa sohbet penceresi doğrudan açılır (günlükte nedeni yazar). |
 | Kapat düğmesi uygulamayı kapatmıyor | Bilerek böyle: pencere gizlenir. Çıkış: simgeye sağ tık → "Uygulamadan çık". |
-| "no chat/embedding model configured" | Ayarlar → model seçin; `SayisalTasarimUzmani.exe doctor` |
+| "no chat/embedding model configured" | Ayarlar → model seçin; `SurecUzmani.exe doctor` |
 | "indexed with embedding model …" | Embedding modeli değişti: Admin › Ortak kütüphane → "Tamamen yeniden oluştur" veya `ingest --rebuild` |
 | Araç kullanılmıyor | vLLM'i `--enable-auto-tool-choice --tool-call-parser …` ile başlatın |
 | Cevapta `<think>` / düşünme metni | vLLM'de `--reasoning-parser` kullanın veya Ayarlar → Düşünme `off` |
@@ -738,13 +745,13 @@ doğrulama, hücre eşleştirme, konum, geçiş) sınar, gerçek bir modelin do�
 | Bildirim gelmiyor | Ayarlar → bildirim açık mı; Windows odak yardımı / Rahatsız etmeyin kapalı mı; pencere öndeyken bildirim çıkmaz. Günlükte "notification" satırı nedeni yazar. |
 | Tablolar/parametreler "doğrulanmadı" | Görsel model tanımlı mı, sayfada metin katmanı var mı (OCR)? Doküman uyarılarında hangi hücrenin neden eşleşmediği yazar (yanlış sütun, birim, satır koşulu). `inspect --table-pages` |
 | "Kaynak sayfası bulundu, kesin konum eşleştirilemedi" | Kaynak metni sayfada tek bir yere eşlenemedi (tekrarlanan metin, metin katmanı farklı). Sayfa yine de doğrudur; ifadenin doğruluğu "Doğrulama" durumundadır. |
-| "Eski indeks" uyarısı / vurgu yok | Admin › Ortak kütüphane → "Konum verisini oluştur" veya `SayisalTasarimUzmani.exe migrate` |
+| "Eski indeks" uyarısı / vurgu yok | Admin › Ortak kütüphane → "Konum verisini oluştur" veya `SurecUzmani.exe migrate` |
 | "Doğrulama tamamlanamadı" | Denetçi (sohbet modeli) hata verdi veya geçerli karar döndürmedi; sunucuyu/`techrag.log`'u kontrol edin. Bu durumda ifadeler bilerek gösterilmez. |
 | Belge "kaynak yok" görünüyor | Dosya silinmiş/taşınmış ya da klasör yeniden adlandırılmış. Dosya geri gelirse yeniden taramada otomatik düzelir; gerçekten silindiyse sol paneldeki uyarıdan "İndeksten kaldır". |
 | Yeniden tarama "erişilemeyen" diyor | Ağ paylaşımı bağlı mı / klasör yetkisi var mı? Belgeler bu durumda silinmiş sayılmaz. |
 | Sürekli netleştirme sorusu | Soruya standart/sürümü ve koşulu (hız sınıfı, yoğunluk, sıcaklık) yazın ya da soldan belge seçin; "tüm değerleri listele" gibi bir istek koşul sorusunu atlar; tamamen kapatmak için `retrieval.clarify_ambiguous: false` |
 | Bir belge "kısmen işlendi" / "başarısız" | Admin › Ortak kütüphane › Kalite raporunda aşama, sayfa ve önerilen işlem yazar; "Başarısız işlemleri yeniden dene" mevcut indeksi silmeden yeniden dener. |
-| Soru yanlış standarda gidiyor / "yüklü değil" | `SayisalTasarimUzmani.exe docs` ile doküman etiketlerini kontrol edin; etiketsiz dokümanlar adı geçen standarda dahil edilmez. Dosya adına standart/sürüm yazın veya `domains.yaml` desenlerini genişletin |
+| Soru yanlış standarda gidiyor / "yüklü değil" | `SurecUzmani.exe docs` ile doküman etiketlerini kontrol edin; etiketsiz dokümanlar adı geçen standarda dahil edilmez. Dosya adına standart/sürüm yazın veya `domains.yaml` desenlerini genişletin |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | Aşağıdaki "HTTPS sertifika hataları" bölümü |
 | Cevap yerine "yeterli boş bellek yok" | Kütüphanenin arama verisi belleğe sığmadı (ör. ~52 bin parça: ~400 MB). Açık programları kapatıp yeniden sorun; sürerse uygulamadan çıkıp yeniden açın. "Teknik ayrıntı"da asıl hata yazar. |
 | Cevap yerine "model sunucusuna bağlanılamadı" / "zamanında cevap vermedi" / "isteği reddetti" | Sırasıyla: ağ ve Ayarlar'daki sunucu adresi; sunucunun yoğunluğu; API anahtarı. Embedding ve reranker isteklerinde anlık bir bağlantı kopması (bağlantı reddedildi, yarıda kesildi) 1 ve 2 sn bekleyerek iki kez yeniden denenir; sertifika hataları ve zaman aşımları yeniden denenmez. |
@@ -763,7 +770,7 @@ türünü ayrıca söyler:
 | Süresi dolmuş / henüz geçerli değil | Sunucu sertifikasını yenileyin; bilgisayarın saatini kontrol edin. |
 | TLS el sıkışması başarısız | Sunucu düz HTTP konuşuyor: adresi `http://` ile yazın. |
 
-Komut satırından aynı teşhis: `SayisalTasarimUzmani.exe cert https://vllm.sirket.local:8000/v1` (zinciri, parmak izini
+Komut satırından aynı teşhis: `SurecUzmani.exe cert https://vllm.sirket.local:8000/v1` (zinciri, parmak izini
 ve mevcut ayarlarla doğrulama sonucunu gösterir); `--trust` ile onaylayıp güvenilenlere ekler.
 Son çare (yalnızca test): servis kartındaki **"SSL doğrulamasını kapat"**. Şirket proxy'si TLS'i araya
 girerek açıyorsa model sunucuları için **"Sistem proxy ayarlarını kullan"** kapalı kalmalı (varsayılan).
@@ -782,7 +789,7 @@ girerek açıyorsa model sunucuları için **"Sistem proxy ayarlarını kullan"*
 * Denetçi aynı (veya ayarlanan) LLM'dir; deterministik kontroller sayı/birim/atıf hatalarını yakalar ama
   anlamsal hataların yakalanması denetçi modelinin kalitesine bağlıdır.
 * Standart/sürüm etiketleme `domains.yaml` desenleri + LLM meta verisiyle yapılır; olağan dışı dosya adları
-  yanlış/eksik etiketlenebilir (`SayisalTasarimUzmani.exe docs` ile kontrol edin).
+  yanlış/eksik etiketlenebilir (`SurecUzmani.exe docs` ile kontrol edin).
 * Errata'nın maddeye bağlanması, errata metninde "Section 4.2.6.3" gibi açık madde numarası varsa yapılır.
 * Belge klasörleri yerel diskte ve sentetik ağaçlarla test edildi (iç içe klasör, Türkçe/boşluklu adlar, aynı adlı
   dosyalar, bağlantı döngüsü, okunamayan alt klasör, klasörün geçici olarak kaybolması). Gerçek bir SMB/DFS
@@ -841,7 +848,7 @@ techrag/
                    gizle/göster, güvenli çıkış; argümanla CLI
   mirror.py        ağdaki salt-okunur kütüphanenin indeksinin yerel kopyası, açılışta güncellik denetimi
   org.py           kurum ayarları: ortak klasördeki kurum-ayarlari.yaml, exe'nin yanındaki işaretçi, yerel kopya
-  icon.py          uygulamanın simgesi (resources/sayisal-tasarim.png): PNG çözme ve ölçekleme (numpy),
+  icon.py          uygulamanın simgesi (resources/surec.png): PNG çözme ve ölçekleme (numpy),
                    derlemede exe'nin .ico'su olarak yazılır
   launcher.py      masaüstü simgesi (Win32 katmanlı pencere, DPI/çoklu monitör, sağ tık menüsü, aç/gizle için
                    "pencere önde mi" denetimi), tek örnek kilidi

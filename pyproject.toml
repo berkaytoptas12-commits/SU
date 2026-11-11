@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "techrag"
-version = "0.15.3"
-description = "Sayısal Tasarım Uzmanı: source-grounded, verification-first assistant for hardware interface and design standards"
+version = "0.16.0"
+description = "Süreç Uzmanı: source-grounded, verification-first document assistant"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

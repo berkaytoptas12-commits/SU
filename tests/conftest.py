@@ -88,7 +88,7 @@ def _no_org_settings(tmp_path, monkeypatch):
     file next to the "exe" lives in the test's own folder."""
     from techrag import org
 
-    monkeypatch.setenv("TECHRAG_ORG_POINTER", str(tmp_path / "exe" / "SayisalTasarimUzmani.kurum.txt"))
+    monkeypatch.setenv("TECHRAG_ORG_POINTER", str(tmp_path / "exe" / "SurecUzmani.kurum.txt"))
     monkeypatch.delenv("TECHRAG_ORG_SETTINGS", raising=False)
     org._reset()
     yield
