@@ -1,9 +1,9 @@
 """Configuration.
 
 Layering (later wins): built-in defaults -> YAML file -> per-user settings.json (written by the desktop
-Settings dialog) -> environment variables ``TECHRAG_<SECTION>__<KEY>`` (e.g. ``TECHRAG_LLM__MODEL``).
+Settings dialog) -> environment variables ``SURECUZMANI_<SECTION>__<KEY>`` (e.g. ``SURECUZMANI_LLM__MODEL``).
 
-YAML lookup: explicit path > $TECHRAG_CONFIG > ./config/config.yaml (optional).
+YAML lookup: explicit path > $SURECUZMANI_CONFIG > ./config/config.yaml (optional).
 
 All model access goes through OpenAI-compatible HTTP endpoints (vLLM / SGLang / ...): chat, vision,
 embeddings and rerank can each point at a different server. Nothing heavy runs locally.
@@ -25,6 +25,7 @@ import yaml
 DEFAULT_CONFIG_PATH = Path("config/config.yaml")
 APP_TITLE = "Süreç Uzmanı"   # the product name shown to users
 APP_NAME = "SurecUzmani"     # file and folder names (ASCII: safe in paths, archives and release assets)
+ENV_PREFIX = "SURECUZMANI_"  # environment variables (Sayısal Tasarım Uzmanı reads TECHRAG_*; never shared)
 
 log = logging.getLogger("techrag.config")
 
@@ -42,9 +43,9 @@ def write_text_atomic(path: Path, text: str | bytes) -> None:
 
 
 def app_dir(base: Path, lower: bool = False) -> Path:
-    """<base>/<app folder>: only this app's own folder. Süreç Uzmanı started from the Sayısal Tasarım Uzmanı source;
-    that app's folders (SayisalTasarimUzmani, or TechRAG from before its rename) are never adopted, so the two apps
-    keep separate settings, API keys, libraries, chats and single-instance locks and run side by side."""
+    """<base>/<app folder>: only this app's own folder. Süreç Uzmanı started from the Sayısal Tasarım Uzmanı
+    source; that app's folders (SayisalTasarimUzmani, or TechRAG from before its rename) are never adopted, so the
+    two apps keep separate settings, API keys, libraries, chats and single-instance locks and run side by side."""
     return Path(base) / (APP_NAME.lower() if lower else APP_NAME)
 
 
@@ -289,7 +290,7 @@ class UIConfig:
 @dataclass
 class OrgConfig:
     """Where this user's organization settings are (techrag.org): the folder given when the app asked at first start.
-    A pointer file next to the exe or TECHRAG_ORG_SETTINGS take precedence."""
+    A pointer file next to the exe or SURECUZMANI_ORG_SETTINGS take precedence."""
     path: str = ""
     asked: bool = False             # asked once at first start (answered or declined): not asked again
 
@@ -365,7 +366,7 @@ class Config:
         """Every model server is called with the one shared key (auth.api_key).
 
         adopt_legacy: a key set the old way, per service (an older settings file, a config file or
-        TECHRAG_LLM__API_KEY), becomes the shared key when none is set - the chat model's first."""
+        SURECUZMANI_LLM__API_KEY), becomes the shared key when none is set - the chat model's first."""
         services = (self.llm, self.vision, self.embedding, self.reranker)
         if adopt_legacy and not self.auth.api_key:
             self.auth.api_key = next((s.api_key for s in services if s.api_key), "")
@@ -439,11 +440,13 @@ def apply_dict(obj: Any, data: dict, where: str = "", strict: bool = True) -> No
 
 
 def _apply_env(cfg: Config) -> None:
-    """TECHRAG_<SECTION>__<KEY> / TECHRAG_<KEY> overrides. Only config fields are set (never properties such as
-    library_dir, methods or whole sections); other TECHRAG_* variables are ignored."""
-    prefix = "TECHRAG_"
+    """SURECUZMANI_<SECTION>__<KEY> / SURECUZMANI_<KEY> overrides. Only config fields are set (never properties such
+    as library_dir, methods or whole sections); other SURECUZMANI_* variables are ignored. The TECHRAG_* variables of
+    Sayısal Tasarım Uzmanı (same source, e.g. set by IT for that app) are never read."""
+    prefix = ENV_PREFIX
+    skip = {f"{prefix}CONFIG", f"{prefix}DEBUG", f"{prefix}NO_USER_SETTINGS"}
     for name, value in os.environ.items():
-        if not name.startswith(prefix) or name in ("TECHRAG_CONFIG", "TECHRAG_DEBUG", "TECHRAG_NO_USER_SETTINGS"):
+        if not name.startswith(prefix) or name in skip:
             continue
         *sections, key = name[len(prefix):].lower().split("__")
         target: Any = cfg
@@ -461,14 +464,14 @@ def _field_names(obj: Any) -> set[str]:
 
 def load_config(path: Optional[str | Path] = None, user_settings: Optional[bool] = None) -> Config:
     cfg = Config()
-    candidate = Path(path) if path else Path(os.environ.get("TECHRAG_CONFIG", DEFAULT_CONFIG_PATH))
+    candidate = Path(path) if path else Path(os.environ.get("SURECUZMANI_CONFIG", DEFAULT_CONFIG_PATH))
     if candidate.exists():
         with open(candidate, encoding="utf-8") as fh:
             apply_dict(cfg, yaml.safe_load(fh) or {})
     elif path:
         raise FileNotFoundError(f"Config file not found: {candidate}")
     if user_settings is None:
-        user_settings = not os.environ.get("TECHRAG_NO_USER_SETTINGS")
+        user_settings = not os.environ.get("SURECUZMANI_NO_USER_SETTINGS")
     if user_settings:
         from techrag import org
         from techrag.settings import follow_org, load_user_settings

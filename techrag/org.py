@@ -3,9 +3,10 @@ folder (usually the shared library's folder), so that the exe can be handed to o
 
 * Saved from Admin › Ayarlar › "Kurum ayarlarını kaydet": the current model servers and models, answering and
   advanced settings, connection security, the shared library folder (and whether others open it read-only) and the
-  usage log folder go into <folder>/kurum-ayarlari.yaml. Never the API key (each user enters it once; it is stored
-  encrypted for that user) and never personal folders.
-* Found, in this order: the TECHRAG_ORG_SETTINGS environment variable (IT can set it), a one-line pointer file next
+  usage log folder go into <folder>/SurecUzmani.kurum-ayarlari.yaml (its own name: Sayısal Tasarım Uzmanı's file in
+  the same folder is kurum-ayarlari.yaml). Never the API key (each user enters it once; it is stored encrypted for
+  that user) and never personal folders.
+* Found, in this order: the SURECUZMANI_ORG_SETTINGS environment variable (IT can set it), a one-line pointer file next
   to the exe (SurecUzmani.kurum.txt, written when the settings are saved, handed out with the exe), or the
   folder the user gave when the app asked once at first start.
 * Applied as defaults: built-in defaults < organization settings < the user's own settings < environment. Nothing is
@@ -35,7 +36,9 @@ from techrag.config import Config, write_text_atomic
 
 log = logging.getLogger("techrag.org")
 
-ORG_FILE = "kurum-ayarlari.yaml"
+# Own name in the shared folder: Sayısal Tasarım Uzmanı (same source) writes kurum-ayarlari.yaml, and an admin may
+# well pick the same folder for both apps; neither app then reads or overwrites the other's organization settings.
+ORG_FILE = "SurecUzmani.kurum-ayarlari.yaml"
 POINTER_FILE = "SurecUzmani.kurum.txt"
 CACHE_FILE = "kurum-ayarlari.cache.yaml"
 
@@ -88,8 +91,8 @@ def same(section: str, key: str, a: Any, b: Any) -> bool:
 
 
 def pointer_path() -> Optional[Path]:
-    """The pointer file next to the exe (TECHRAG_ORG_POINTER overrides it, for tests and odd installs)."""
-    override = os.environ.get("TECHRAG_ORG_POINTER")
+    """The pointer file next to the exe (SURECUZMANI_ORG_POINTER overrides it, for tests and odd installs)."""
+    override = os.environ.get("SURECUZMANI_ORG_POINTER")
     if override:
         return Path(override)
     if getattr(sys, "frozen", False):
@@ -104,7 +107,7 @@ def org_file(where: str | Path) -> Path:
 
 
 def locate(user: dict) -> tuple[Optional[Path], str]:
-    env = os.environ.get("TECHRAG_ORG_SETTINGS", "").strip()
+    env = os.environ.get("SURECUZMANI_ORG_SETTINGS", "").strip()
     if env:
         return org_file(env), "env"
     ptr = pointer_path()

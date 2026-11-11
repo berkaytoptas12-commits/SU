@@ -8,7 +8,7 @@ from techrag import settings as S
 
 def test_settings_with_bom_and_unreadable_files(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(path))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(path))
     path.write_bytes(b"\xef\xbb\xbf" + json.dumps({"llm": {"model": "m1"}}).encode())
     assert S.load_user_settings()["llm"]["model"] == "m1", "a BOM (Notepad, PowerShell 5) is fine"
     path.write_text('{"llm": {"model": "m1", ', encoding="utf-8")
@@ -19,7 +19,7 @@ def test_settings_with_bom_and_unreadable_files(tmp_path, monkeypatch):
 
 def test_key_that_cannot_be_decrypted_is_kept(tmp_path, monkeypatch, cfg):
     path = tmp_path / "settings.json"
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(path))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(path))
     locked = {"dpapi": "AAAA"}  # written by another Windows account: not decryptable here
     path.write_text(json.dumps({"llm": {"api_key": locked, "model": "m"}}), encoding="utf-8")
     assert S.load_user_settings()["llm"]["api_key"] == ""
@@ -37,9 +37,9 @@ def test_per_service_keys_become_one_shared_key(tmp_path, monkeypatch, cfg):
     from techrag.config import load_config
 
     path = tmp_path / "settings.json"
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(path))
-    monkeypatch.delenv("TECHRAG_NO_USER_SETTINGS", raising=False)
-    monkeypatch.setenv("TECHRAG_CONFIG", str(tmp_path / "none.yaml"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(path))
+    monkeypatch.delenv("SURECUZMANI_NO_USER_SETTINGS", raising=False)
+    monkeypatch.setenv("SURECUZMANI_CONFIG", str(tmp_path / "none.yaml"))
     path.write_text(json.dumps({"embedding": {"api_key": "emb-key"}, "llm": {"api_key": "chat-key", "model": "m"},
                                 "reranker": {"api_key": "rr-key"}}), encoding="utf-8")
     c = load_config()
@@ -60,9 +60,9 @@ def test_per_service_keys_become_one_shared_key(tmp_path, monkeypatch, cfg):
 def test_unknown_environment_variables_do_not_break_start_up(monkeypatch, tmp_path):
     from techrag.config import load_config
 
-    monkeypatch.setenv("TECHRAG_NO_USER_SETTINGS", "1")
-    monkeypatch.setenv("TECHRAG_LIBRARY_DIR", str(tmp_path))       # a property, not a setting
-    monkeypatch.setenv("TECHRAG_PATHS__LIBRARY_DIR", str(tmp_path / "lib"))
+    monkeypatch.setenv("SURECUZMANI_NO_USER_SETTINGS", "1")
+    monkeypatch.setenv("SURECUZMANI_LIBRARY_DIR", str(tmp_path))       # a property, not a setting
+    monkeypatch.setenv("SURECUZMANI_PATHS__LIBRARY_DIR", str(tmp_path / "lib"))
     cfg = load_config()
     assert cfg.paths.library_dir == str(tmp_path / "lib")
 
@@ -71,7 +71,7 @@ def test_top_k_settings_are_checked_and_used(tmp_path, monkeypatch, cfg, engine)
     """Admin › Ayarlar › Gelişmiş: top k (passages given to the model) and the candidate counts of the search."""
     import pytest
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "s.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "s.json"))
     c = S.update_settings(cfg, {"retrieval": {"final_top_k": 3, "bm25_top_k": 20, "dense_top_k": 25},
                                 "reranker": {"candidates": 10}})
     assert (c.retrieval.final_top_k, c.retrieval.bm25_top_k, c.retrieval.dense_top_k, c.reranker.candidates) == \

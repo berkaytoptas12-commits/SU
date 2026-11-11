@@ -44,7 +44,7 @@ jobs:
         run: pyinstaller packaging/techrag.spec --noconfirm
       - name: Build (single portable exe)
         env:
-          TECHRAG_ONEFILE: "1"
+          SURECUZMANI_ONEFILE: "1"
         run: pyinstaller packaging/techrag.spec --noconfirm
       - name: Self-test the frozen builds
         shell: pwsh
@@ -75,7 +75,7 @@ jobs:
           foreach ($exe in @("dist/SurecUzmani/SurecUzmani.exe", "dist/SurecUzmani-portable.exe")) {
             $name = [IO.Path]::GetFileNameWithoutExtension($exe)
             $out = Join-Path $PWD "smoke-$name.json"
-            $env:TECHRAG_SMOKE = $out
+            $env:SURECUZMANI_SMOKE = $out
             Write-Host "=== $exe"
             $p = Start-Process -FilePath $exe -PassThru
             $null = $p.Handle  # keeps ExitCode available after the process ends
@@ -94,7 +94,7 @@ jobs:
             Start-Sleep -Seconds 2
             if (Get-Process -Name $name -ErrorAction SilentlyContinue) { throw "$exe still running after 'Quit'" }
           }
-          Remove-Item Env:TECHRAG_SMOKE
+          Remove-Item Env:SURECUZMANI_SMOKE
       - name: Package
         shell: pwsh
         run: Compress-Archive -Path dist/SurecUzmani -DestinationPath SurecUzmani-win64.zip

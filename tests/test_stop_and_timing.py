@@ -137,7 +137,7 @@ def test_regeneration_does_not_think(engine, fake, cfg):
 # ------------------------------------------------------------------------------------------- server
 @pytest.fixture()
 def client(cfg, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     app = create_app(cfg, engine, warmup=False, desktop=True)
     seen = []
     app.state.on_answer = seen.append

@@ -26,7 +26,7 @@ def ui(cfg, engine, tmp_path, monkeypatch):
 
     from techrag.server import create_app
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(cfg, engine, warmup=False, desktop=False), host="127.0.0.1",
                                            port=port, log_level="warning"))
@@ -39,7 +39,7 @@ def ui(cfg, engine, tmp_path, monkeypatch):
     try:
         with sync_api.sync_playwright() as p:
             browser = None
-            candidates = [None, os.environ.get("TECHRAG_CHROMIUM"), "/opt/pw-browsers/chromium",
+            candidates = [None, os.environ.get("SURECUZMANI_CHROMIUM"), "/opt/pw-browsers/chromium",
                           *glob.glob("/opt/pw-browsers/chromium-*/chrome-linux/chrome")]
             for exe in candidates:
                 try:

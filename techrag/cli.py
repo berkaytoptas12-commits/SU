@@ -601,7 +601,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        if os.environ.get("TECHRAG_DEBUG"):
+        if os.environ.get("SURECUZMANI_DEBUG"):
             raise
         print(f"ERROR: {exc.__class__.__name__}: {exc}", file=sys.stderr)
         return 1

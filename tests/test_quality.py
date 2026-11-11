@@ -245,7 +245,7 @@ def test_quality_api_and_retry_job(cfg, engine, tmp_path, monkeypatch, fake):
 
     from techrag.server import create_app
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     cfg.llm.api_key = "sk-very-secret-key-123456"
     with TestClient(create_app(cfg, engine, warmup=False, desktop=True)) as c:
         r = c.get("/api/quality").json()

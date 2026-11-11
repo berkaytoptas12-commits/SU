@@ -1,8 +1,9 @@
 """The round launcher icon of the desktop app and its single-instance handling (Windows).
 
-The app starts as a small round icon in the bottom-right corner of the screen. A click opens the chat window, a drag
-moves the icon (its place is remembered), and the right-click menu offers "Open chat", "Settings" and "Quit". The icon
-stays above normal windows but never takes the keyboard focus.
+The app starts as a small round icon near the bottom-right corner of the screen, just left of where Sayısal Tasarım
+Uzmanı (built from the same source) puts its icon, so the two never cover each other when both run. A click opens the
+chat window, a drag moves the icon (its place is remembered), and the right-click menu offers "Open chat", "Settings"
+and "Quit". The icon stays above normal windows but never takes the keyboard focus.
 
 It is a plain Win32 layered window driven through ctypes on its own thread: per-pixel alpha gives the round shape
 smooth edges and makes the transparent corners click-through, and no second browser engine or extra framework is
@@ -33,6 +34,8 @@ log = logging.getLogger("techrag.launcher")
 
 SIZE_DIP = 60        # icon window edge in device-independent pixels (the disc)
 MARGIN_DIP = 16      # default distance from the work-area edges (bottom-right corner)
+SIBLING_GAP_DIP = 12  # space between this icon and Sayısal Tasarım Uzmanı's, which sits MARGIN_DIP from the corner
+DEFAULT_DX_DIP = MARGIN_DIP + SIZE_DIP + SIBLING_GAP_DIP   # default distance from the right edge: left of that icon
 DRAG_DIP = 4         # a press that moves farther than this is a drag, not a click
 IDM_OPEN, IDM_SETTINGS, IDM_QUIT = 1001, 1002, 1003
 # Internal Windows names (mutex, window class, activation message) carry this app's own name, so a running Sayısal
@@ -136,7 +139,9 @@ def primary_monitor(monitors: list[Monitor]) -> Monitor:
 
 
 def default_anchor() -> dict:
-    return {"h": "right", "dx": MARGIN_DIP, "v": "bottom", "dy": MARGIN_DIP}
+    """Bottom-right, to the left of Sayısal Tasarım Uzmanı's icon (its default is MARGIN_DIP from the corner): with
+    both apps running, both icons are visible side by side until the user drags one elsewhere."""
+    return {"h": "right", "dx": DEFAULT_DX_DIP, "v": "bottom", "dy": MARGIN_DIP}
 
 
 def anchor_for(x: int, y: int, size: int, mon: Monitor) -> dict:
@@ -159,14 +164,15 @@ def _num(value, default: float) -> float:
 
 
 def place(anchor: Optional[dict], monitors: list[Monitor]) -> tuple[Monitor, int, int, int]:
-    """(monitor, x, y, size) for a remembered anchor (bottom-right of the primary work area by default). A monitor
+    """(monitor, x, y, size) for a remembered anchor (default_anchor on the primary work area by default). A monitor
     that is no longer connected falls back to the primary one; the icon always ends up fully inside a work area."""
-    a = anchor if isinstance(anchor, dict) else {}
+    d = default_anchor()
+    a = anchor if isinstance(anchor, dict) else d
     mon = next((m for m in monitors if a.get("monitor") and m.name == a.get("monitor")), None) or \
         primary_monitor(monitors)
     work = mon.work if mon.work[2] > mon.work[0] and mon.work[3] > mon.work[1] else mon.rect
     size, s = icon_px(mon.dpi), mon.scale
-    dx, dy = _num(a.get("dx"), MARGIN_DIP) * s, _num(a.get("dy"), MARGIN_DIP) * s
+    dx, dy = _num(a.get("dx"), d["dx"]) * s, _num(a.get("dy"), d["dy"]) * s
     x = work[0] + dx if a.get("h") == "left" else work[2] - size - dx
     y = work[1] + dy if a.get("v") == "top" else work[3] - size - dy
     x, y = clamp_into(round(x), round(y), size, work)

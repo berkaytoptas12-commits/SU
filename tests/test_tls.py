@@ -149,7 +149,7 @@ def test_settings_endpoints_inspect_and_trust(serve, cfg, engine, tmp_path, monk
     from techrag.server import create_app
     from techrag.settings import load_user_settings
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     port = serve("self")
     base = f"https://127.0.0.1:{port}/v1"
     with TestClient(create_app(cfg, engine, warmup=False)) as c:
@@ -174,8 +174,8 @@ def test_cli_cert_inspect_and_trust(serve, tmp_path, monkeypatch, capsys):
     from techrag.cli import main
     from techrag.settings import load_user_settings
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
-    monkeypatch.delenv("TECHRAG_NO_USER_SETTINGS", raising=False)
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.delenv("SURECUZMANI_NO_USER_SETTINGS", raising=False)
     port = serve("self")
     url = f"https://127.0.0.1:{port}/v1"
     assert main(["cert", url, "--save", str(tmp_path / "chain.pem")]) == 1

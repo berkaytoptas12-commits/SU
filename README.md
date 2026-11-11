@@ -201,11 +201,33 @@ anahtarlar ilk kayıtta ortak anahtara taşınır (sohbet modelininki esas alın
 Ayarlar `%APPDATA%\SurecUzmani\settings.json` dosyasına yazılır; API anahtarları **Windows DPAPI** ile kullanıcı
 hesabına bağlı şifrelenir.
 
-Süreç Uzmanı yalnızca kendi `SurecUzmani` klasörlerini kullanır: aynı bilgisayardaki Sayısal Tasarım Uzmanı'nın
-klasörleri (`SayisalTasarimUzmani`, eski `TechRAG`) okunmaz ve değiştirilmez. Ayarlar, API anahtarları, kütüphane,
-sohbetler ve günlük iki uygulamada ayrıdır; tek örnek kilidi de ayrı olduğundan birini açmak diğerinin penceresini
-öne getirmez. Python paketi (`techrag`), komut satırı adı ve `TECHRAG_*` ortam değişkenleri teknik ad olarak kaldı
-(ortam değişkenleri iki uygulamada aynı adı taşır).
+### 2.3.1 Sayısal Tasarım Uzmanı ile aynı bilgisayarda
+
+Süreç Uzmanı, Sayısal Tasarım Uzmanı'nın kaynak kodundan başlatıldı; iki uygulama aynı bilgisayarda, aynı Windows
+oturumunda **aynı anda** çalışır ve birbirinin hiçbir şeyini kullanmaz:
+
+| Ne | Süreç Uzmanı | Sayısal Tasarım Uzmanı |
+|---|---|---|
+| Ayarlar, API anahtarları, günlük, sohbetler, pencere durumu | `%APPDATA%\SurecUzmani` | `%APPDATA%\SayisalTasarimUzmani` (veya eski `TechRAG`) |
+| Varsayılan kütüphane, kişisel klasör | `%USERPROFILE%\SurecUzmani\…` | `%USERPROFILE%\SayisalTasarimUzmani\…` |
+| Yerel kopya (ağdaki kütüphane), WebView2 verisi | `%LOCALAPPDATA%\SurecUzmani`, `%APPDATA%\SurecUzmani\webview` | kendi klasörleri |
+| Tek örnek kilidi, simge penceresi, "sohbeti aç" iletisi | `SurecUzmani.…` | `TechRAG.…` |
+| Arka uç portu (127.0.0.1) | ayar klasöründen türetilir, farklıdır; doluysa boş bir port | aynı kural |
+| Ortam değişkenleri | `SURECUZMANI_*` | `TECHRAG_*` |
+| Kurum ayarları dosyası (ortak klasörde) | `SurecUzmani.kurum-ayarlari.yaml` | `kurum-ayarlari.yaml` |
+| Exe'nin yanındaki işaretçi | `SurecUzmani.kurum.txt` | `SayisalTasarimUzmani.kurum.txt` |
+| Ekrandaki simge (ilk açılış) | sağ altta, diğerinin hemen solunda | sağ alt köşede |
+
+* Birini açmak diğerinin penceresini öne getirmez; birinden çıkmak diğerini etkilemez.
+* Sayısal Tasarım Uzmanı'nın klasörleri, `TECHRAG_*` ortam değişkenleri (BT grup ilkesiyle verilmiş olsa bile) ve
+  `kurum-ayarlari.yaml` dosyası **okunmaz ve değiştirilmez**. İki uygulamanın kurum ayarları aynı ağ klasöründe
+  durabilir; her biri yalnızca kendi dosyasını yazar ve okur.
+* İki simge ilk açılışta yan yanadır (aralarında 12 DIP); sürüklenen simgenin yeri her uygulamada ayrı hatırlanır.
+* **Ortak kütüphane ve kullanım günlüğü klasörlerini** iki uygulama için ayrı seçin: aynı kütüphane klasörü aynı
+  indeksi paylaşmak, aynı günlük klasörü iki uygulamanın sorularının aynı `<kullanıcı>.csv` dosyasına yazılması
+  demektir.
+* Python paketi (`techrag`) ve komut satırı adı teknik ad olarak kaldı; exe'ler birbirinden bağımsızdır. Geliştirme
+  ortamında iki depo aynı Python ortamına kurulursa aynı paket adı çakışır; her biri için ayrı sanal ortam kullanın.
 
 ### 2.4 Kurum ayarları (exe'yi başkalarına verirken)
 
@@ -215,7 +237,7 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
 1. Kendi bilgisayarınızda her şeyi ayarlayıp kaydedin (Ayarlar ve Admin › Ayarlar), ortak kütüphaneyi ağ yolundan
    açın (`\\sunucu\paylasim\library`).
 2. **Admin › Ayarlar › Kurum ayarları**: klasörü seçin (ör. ortak kütüphane klasörü) ve **Kurum ayarlarını
-   kaydet**. Klasöre `kurum-ayarlari.yaml` yazılır: model sunucuları ve modeller, düşünme/araç/cevaplama ve gelişmiş
+   kaydet**. Klasöre `SurecUzmani.kurum-ayarlari.yaml` yazılır: model sunucuları ve modeller, düşünme/araç/cevaplama ve gelişmiş
    ayarlar, bağlantı güvenliği, ortak kütüphane klasörü (ve **diğer kullanıcıların onu salt-okunur açması**,
    varsayılan işaretli), kullanım günlüğü klasörü. **API anahtarı ve kişisel klasörler yazılmaz.** Dosya yarım
    kalmayacak şekilde yazılır; o klasöre yazma izniniz olmalıdır.
@@ -245,7 +267,7 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
   saklanır ve uygulanmaz. **Admin › Ayarlar**'daki kurum ayarları satırı o açılışta hangi ayarların değiştiğini söyler.
 * **Yeni ayarlar uygulama yeniden başlayınca okunur.** Sohbet penceresinin ✕ düğmesi uygulamadan çıkmaz, exe'ye yeniden
   çift tıklamak da çalışan uygulamayı öne getirir; tam çıkış: simgeye sağ tık → **Uygulamadan çık**.
-* **Bulunma sırası:** `TECHRAG_ORG_SETTINGS` ortam değişkeni (BT grup ilkesiyle verebilir; klasör veya dosya yolu) →
+* **Bulunma sırası:** `SURECUZMANI_ORG_SETTINGS` ortam değişkeni (BT grup ilkesiyle verebilir; klasör veya dosya yolu) →
   exe'nin yanındaki `SurecUzmani.kurum.txt` → ilk açılışta verilen klasör. Hiçbiri yoksa ve uygulama hiç
   ayarlanmamışsa ilk açılışta bir kez "Kurum ayarları nerede?" diye sorulur ("Kurum ayarı kullanmıyorum" da
   seçilebilir).
@@ -519,7 +541,8 @@ her şey burada toplanır):
 
 ### Açılış: sohbet simgesi
 
-* `SurecUzmani.exe` açılınca önce ekranın sağ alt köşesinde (görev çubuğunun üstünde) küçük bir
+* `SurecUzmani.exe` açılınca önce ekranın sağ altında (görev çubuğunun üstünde, Sayısal Tasarım Uzmanı'nın
+  simgesinin yerinin hemen solunda; bkz. §2.3.1) küçük bir
   **simge** belirir: kömür grisi bir daire üzerinde bronz döngü okları ve onay işaretli bir pano, "Yapay Zeka
   Asistanları" menüsündeki Süreç Uzmanı simgesiyle aynı (`techrag/resources/surec.png`; uygulamanın içinde
   her monitörün ölçeğine küçültülür, internetten bir şey indirilmez, köşeleri saydamdır). Exe'nin simgesi de budur. Simge normal pencerelerin üzerinde kalır ama klavye odağını
@@ -847,7 +870,7 @@ techrag/
   desktop.py       exe giriş noktası: tek örnek, süreç içi FastAPI, gizli açılan pywebview sohbet penceresi,
                    gizle/göster, güvenli çıkış; argümanla CLI
   mirror.py        ağdaki salt-okunur kütüphanenin indeksinin yerel kopyası, açılışta güncellik denetimi
-  org.py           kurum ayarları: ortak klasördeki kurum-ayarlari.yaml, exe'nin yanındaki işaretçi, yerel kopya
+  org.py           kurum ayarları: ortak klasördeki SurecUzmani.kurum-ayarlari.yaml, exe'nin yanındaki işaretçi, yerel kopya
   icon.py          uygulamanın simgesi (resources/surec.png): PNG çözme ve ölçekleme (numpy),
                    derlemede exe'nin .ico'su olarak yazılır
   launcher.py      masaüstü simgesi (Win32 katmanlı pencere, DPI/çoklu monitör, sağ tık menüsü, aç/gizle için

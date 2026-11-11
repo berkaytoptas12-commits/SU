@@ -129,7 +129,7 @@ def test_away_from_the_network_the_copy_keeps_working(shared, engine, tmp_path):
 
 
 def test_the_app_reports_and_checks_the_copy(shared, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     with TestClient(create_app(shared, engine, warmup=False, desktop=True)) as client:
         m = client.get("/api/info").json()["mirror"]
         assert m["enabled"] and m["state"] == "network" and m["read_only"]
@@ -142,7 +142,7 @@ def test_the_app_reports_and_checks_the_copy(shared, engine, tmp_path, monkeypat
 
 
 def test_the_writable_library_is_never_copied(cfg, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     cfg.paths.mirror = "on"
     with TestClient(create_app(cfg, engine, warmup=False, desktop=True)) as client:
         m = client.get("/api/info").json()["mirror"]
@@ -184,7 +184,7 @@ def test_a_question_during_the_first_copy_is_answered_at_once(shared, engine, tm
     import threading
     import time
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     real_sync = mirror.Mirror.sync
     release = threading.Event()
 

@@ -14,7 +14,7 @@ from techrag.llm import LLMClient
 from techrag.reranker import APIReranker
 
 # Never touch the developer's real settings.json from tests.
-os.environ["TECHRAG_NO_USER_SETTINGS"] = "1"
+os.environ["SURECUZMANI_NO_USER_SETTINGS"] = "1"
 
 HEADER = "JEDEC Standard - Mini SDRAM Specification"
 
@@ -88,8 +88,8 @@ def _no_org_settings(tmp_path, monkeypatch):
     file next to the "exe" lives in the test's own folder."""
     from techrag import org
 
-    monkeypatch.setenv("TECHRAG_ORG_POINTER", str(tmp_path / "exe" / "SurecUzmani.kurum.txt"))
-    monkeypatch.delenv("TECHRAG_ORG_SETTINGS", raising=False)
+    monkeypatch.setenv("SURECUZMANI_ORG_POINTER", str(tmp_path / "exe" / "SurecUzmani.kurum.txt"))
+    monkeypatch.delenv("SURECUZMANI_ORG_SETTINGS", raising=False)
     org._reset()
     yield
     org._reset()

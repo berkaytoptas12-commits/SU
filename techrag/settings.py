@@ -35,7 +35,7 @@ CLOCK_SLACK = 300
 
 
 def settings_path() -> Path:
-    override = os.environ.get("TECHRAG_SETTINGS")
+    override = os.environ.get("SURECUZMANI_SETTINGS")
     return Path(override) if override else user_config_dir() / "settings.json"
 
 
@@ -221,7 +221,7 @@ def update_settings(cfg: Config, patch: dict) -> Config:
         else:
             stored.pop(key, None)
     # Only what changed goes into the running config: environment variables and command-line options (e.g.
-    # --library, TECHRAG_READ_ONLY) keep winning, as they did at start-up.
+    # --library, SURECUZMANI_READ_ONLY) keep winning, as they did at start-up.
     probe = cfg.copy()
     apply_dict(probe, applied, strict=False)  # validates types before persisting
     check_ranges(probe, applied)

@@ -6,7 +6,7 @@
   running one forward instead of starting another backend.
 * With arguments: behave exactly like the `techrag` CLI (e.g. `SurecUzmani.exe ingest`, `... doctor`).
 
-(`techrag` stays the name of the Python package, CLI and TECHRAG_* variables; users see APP_TITLE.)
+(`techrag` stays the name of the Python package and CLI; environment variables are SURECUZMANI_*; users see APP_TITLE.)
 """
 
 from __future__ import annotations
@@ -659,7 +659,7 @@ def _smoke(desk: DesktopApp, result_path: str) -> None:
             check("page_state_kept", chat.evaluate_js(
                 "[window.__smoke, document.querySelector('#question').value]") == ["kept", "draft"])
             if getattr(sys, "frozen", False):
-                env = {k: v for k, v in os.environ.items() if k != "TECHRAG_SMOKE"}
+                env = {k: v for k, v in os.environ.items() if k != "SURECUZMANI_SMOKE"}
                 env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"  # a fresh start of the exe, as from Explorer
                 before, t0 = desk.stats["activations"], time.time()
                 code = subprocess.run([sys.executable], env=env, timeout=180).returncode
@@ -755,7 +755,7 @@ def _chat_geometry(state) -> tuple[int, int, int, int, Optional[int], Optional[i
 
 
 def _launcher_supported() -> bool:
-    return os.name == "nt" and not os.environ.get("TECHRAG_NO_LAUNCHER")
+    return os.name == "nt" and not os.environ.get("SURECUZMANI_NO_LAUNCHER")
 
 
 def _make_launcher(key: str, desk: DesktopApp, state):
@@ -867,11 +867,11 @@ def _run_gui(key: str, log_path: Path) -> int:
         pass
     storage = user_config_dir() / "webview"
     storage.mkdir(parents=True, exist_ok=True)
-    smoke = os.environ.get("TECHRAG_SMOKE")
+    smoke = os.environ.get("SURECUZMANI_SMOKE")
     clean = False
     try:
         kwargs = {"private_mode": False, "storage_path": str(storage),
-                  "debug": bool(os.environ.get("TECHRAG_WEBVIEW_DEBUG"))}
+                  "debug": bool(os.environ.get("SURECUZMANI_WEBVIEW_DEBUG"))}
         if os.name == "nt":
             kwargs["gui"] = "edgechromium"  # never fall back to the legacy IE engine
         if smoke:

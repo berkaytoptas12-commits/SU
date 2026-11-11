@@ -22,10 +22,11 @@ def inside(x, y, size, work):
 
 def test_default_place_is_bottom_right_of_the_work_area():
     mon, x, y, size = place(None, [FHD])
-    assert size == 60 and (x, y) == (1920 - 60 - 16, 1040 - 60 - 16), "above the taskbar, 16 DIP margin"
+    assert L.DEFAULT_DX_DIP == 16 + 60 + 12, "left of Sayısal Tasarım Uzmanı's icon (see test_side_by_side)"
+    assert size == 60 and (x, y) == (1920 - 60 - 88, 1040 - 60 - 16), "above the taskbar, 16 DIP margin"
     hidpi = Monitor("D1", (0, 0, 2880, 1620), (0, 0, 2880, 1560), 144, True)
     _, x, y, size = place(None, [hidpi])
-    assert size == 90 == icon_px(144) and (x, y) == (2880 - 90 - 24, 1560 - 90 - 24), "60 DIP at 150 %"
+    assert size == 90 == icon_px(144) and (x, y) == (2880 - 90 - 132, 1560 - 90 - 24), "60 DIP at 150 %"
     assert 56 <= L.SIZE_DIP <= 64
 
 
@@ -40,13 +41,13 @@ def test_taskbar_on_the_left_or_top_is_respected():
 def test_remembered_corner_survives_resolution_and_scale_changes():
     mon, x, y, size = place(None, [FHD])
     a = anchor_for(x - 300, y - 200, size, mon)   # dragged somewhere near the bottom-right
-    assert a == {"monitor": FHD.name, "h": "right", "dx": 316.0, "v": "bottom", "dy": 216.0}
+    assert a == {"monitor": FHD.name, "h": "right", "dx": 388.0, "v": "bottom", "dy": 216.0}
     small = Monitor(FHD.name, (0, 0, 1280, 720), (0, 0, 1280, 680), 96, True)
     _, x2, y2, s2 = place(a, [small])
-    assert (1280 - x2 - s2, 680 - y2 - s2) == (316, 216), "same distance to the bottom-right corner"
+    assert (1280 - x2 - s2, 680 - y2 - s2) == (388, 216), "same distance to the bottom-right corner"
     scaled = Monitor(FHD.name, (0, 0, 1920, 1080), (0, 0, 1920, 1040), 120, True)
     _, x3, y3, s3 = place(a, [scaled])
-    assert s3 == 75 and (1920 - x3 - s3, 1040 - y3 - s3) == (395, 270), "DIP distances scale with the monitor"
+    assert s3 == 75 and (1920 - x3 - s3, 1040 - y3 - s3) == (485, 270), "DIP distances scale with the monitor"
 
 
 def test_unplugged_monitor_falls_back_to_the_primary_one():

@@ -96,7 +96,7 @@ def test_the_fast_model_thinks_by_its_own_setting(fast, fake, cfg):
 
 @pytest.fixture()
 def client(cfg, fast, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     with TestClient(create_app(cfg, fast, warmup=False, desktop=True)) as c:
         yield c
 
@@ -142,7 +142,7 @@ def test_an_evaluation_can_run_with_the_fast_model(client, tmp_path):
 def test_the_fast_model_is_saved_and_shared_with_the_organization(cfg, tmp_path, monkeypatch):
     from techrag.settings import load_user_settings, public_settings, update_settings
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     c = update_settings(cfg, {"llm_fast": {"base_url": "", "model": "small", "thinking": "off"}})
     assert c.llm_fast.model == "small" and load_user_settings()["llm_fast"]["model"] == "small"
     assert public_settings(c)["llm_fast"]["model"] == "small" and "api_key" not in public_settings(c)["llm_fast"]

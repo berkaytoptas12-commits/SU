@@ -72,7 +72,7 @@ def test_an_answer_that_fails_for_lack_of_memory_says_so(cfg, engine, tmp_path, 
 
     from techrag.server import create_app
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
 
     def no_memory(*a, **kw):
         raise MemoryError("Unable to allocate 809. MiB for an array with shape (51749, 4096) and data type float32")

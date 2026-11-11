@@ -10,7 +10,7 @@ from techrag.settings import MASK, load_user_settings
 
 @pytest.fixture()
 def client(cfg, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     with TestClient(create_app(cfg, engine, warmup=False, desktop=True)) as c:
         yield c
 
@@ -203,7 +203,7 @@ def test_single_files_with_the_same_name_do_not_overwrite(client, tmp_path):
 # ------------------------------------------------------------------ review findings (server / settings)
 
 def test_nothing_is_written_into_a_read_only_library(cfg, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     src = tmp_path / "x.md"
     src.write_text("# X\n", encoding="utf-8")
     before = sorted(p.name for p in cfg.sources_dir.rglob("*"))
@@ -219,10 +219,10 @@ def test_nothing_is_written_into_a_read_only_library(cfg, engine, tmp_path, monk
 
 def test_saving_a_setting_keeps_command_line_and_environment_overrides(cfg, engine, tmp_path, monkeypatch):
     settings = tmp_path / "settings.json"
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(settings))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(settings))
     settings.write_text(json.dumps({"paths": {"library_dir": str(tmp_path / "other")}, "llm": {"temperature": 0.9}}),
                         encoding="utf-8")
-    monkeypatch.setenv("TECHRAG_LLM__TEMPERATURE", "0.3")
+    monkeypatch.setenv("SURECUZMANI_LLM__TEMPERATURE", "0.3")
     lib = str(cfg.library_dir.resolve())  # as given on the command line (--library)
     with TestClient(create_app(cfg, engine, warmup=False, desktop=True)) as c:
         c.put("/api/settings", json={"ui": {"language": "en"}})

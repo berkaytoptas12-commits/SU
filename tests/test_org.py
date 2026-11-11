@@ -17,8 +17,8 @@ from techrag.settings import load_user_settings, update_settings
 
 @pytest.fixture()
 def user_settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "me" / "settings.json"))
-    monkeypatch.delenv("TECHRAG_NO_USER_SETTINGS", raising=False)
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "me" / "settings.json"))
+    monkeypatch.delenv("SURECUZMANI_NO_USER_SETTINGS", raising=False)
     return tmp_path / "me" / "settings.json"
 
 
@@ -110,7 +110,7 @@ def test_the_environment_variable_and_the_first_start_answer(tmp_path, user_sett
     assert not org.STATUS["path"] and org.public_status(cfg)["ask"], "a fresh install with nothing found is asked"
     update_settings(cfg, {"org": {"path": str(share), "asked": True}})
     assert load_config().llm.model == "gemma-4-31B-it" and org.STATUS["source"] == "user"
-    monkeypatch.setenv("TECHRAG_ORG_SETTINGS", str(share / org.ORG_FILE))
+    monkeypatch.setenv("SURECUZMANI_ORG_SETTINGS", str(share / org.ORG_FILE))
     load_config()
     assert org.STATUS["source"] == "env"
 
@@ -223,7 +223,7 @@ def test_own_settings_of_an_older_version_changed_after_the_last_save_stay(tmp_p
 
 @pytest.fixture()
 def client(cfg, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     with TestClient(create_app(cfg, engine, warmup=False, desktop=True)) as c:
         yield c
 
@@ -255,7 +255,7 @@ def test_the_admin_keeps_opening_the_library_their_own_way(client, cfg, tmp_path
     r = client.post("/api/org/save", json={"path": str(share)}).json()
     assert yaml.safe_load((share / org.ORG_FILE).read_text(encoding="utf-8"))["read_only"] is True
     assert r["file"] and load_user_settings()["read_only"] is False
-    monkeypatch.delenv("TECHRAG_NO_USER_SETTINGS", raising=False)
+    monkeypatch.delenv("SURECUZMANI_NO_USER_SETTINGS", raising=False)
     org._reset()
     restarted = load_config()
     assert restarted.read_only is False and org.STATUS["loaded"]

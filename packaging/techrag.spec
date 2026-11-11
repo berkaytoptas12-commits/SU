@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build:  pyinstaller packaging/techrag.spec --noconfirm   -> dist/SurecUzmani/SurecUzmani.exe
-#         set TECHRAG_ONEFILE=1 && pyinstaller packaging/techrag.spec  -> dist/SurecUzmani-portable.exe
+#         set SURECUZMANI_ONEFILE=1 && pyinstaller packaging/techrag.spec  -> dist/SurecUzmani-portable.exe
 # File names are ASCII (safe in paths, zip archives and GitHub release assets); Windows shows the product name
 # "Süreç Uzmanı" from the version resource (Task Manager, file properties).
 import os
@@ -9,8 +9,8 @@ import re
 from PyInstaller.utils.hooks import collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
-ONEFILE = os.environ.get("TECHRAG_ONEFILE") == "1"
-CONSOLE = os.environ.get("TECHRAG_CONSOLE") == "1"   # debug builds
+ONEFILE = os.environ.get("SURECUZMANI_ONEFILE") == "1"
+CONSOLE = os.environ.get("SURECUZMANI_CONSOLE") == "1"   # debug builds
 
 datas = [
     (os.path.join(ROOT, "techrag", "web"), os.path.join("techrag", "web")),

@@ -1,6 +1,6 @@
 # Süreç Uzmanı (techrag) example configuration (optional).
 # The desktop app stores its settings in %APPDATA%\SurecUzmani\settings.json (Settings dialog); this file is
-# for CLI / server use. Layering: defaults -> this file -> settings.json -> TECHRAG_<SECTION>__<KEY> env vars.
+# for CLI / server use. Layering: defaults -> this file -> settings.json -> SURECUZMANI_<SECTION>__<KEY> env vars.
 # All models are reached over OpenAI-compatible HTTP endpoints (vLLM / SGLang). base_url ends with /v1.
 
 offline: true
@@ -8,7 +8,7 @@ read_only: false                     # true: open a shared library without writi
 
 auth:
   api_key: ""                        # ONE key for every model server (chat/vLLM, vision, embedding, reranker);
-                                     # or TECHRAG_AUTH__API_KEY. Never commit a real key.
+                                     # or SURECUZMANI_AUTH__API_KEY. Never commit a real key.
 
 paths:
   library_dir: data/library          # sources/<collection>/*.pdf + index.sqlite + cache/vlm

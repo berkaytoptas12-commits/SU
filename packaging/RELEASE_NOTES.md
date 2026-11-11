@@ -1,5 +1,23 @@
 ## Süreç Uzmanı — Windows masaüstü uygulaması
 
+### 0.16.1 — Sayısal Tasarım Uzmanı ile aynı bilgisayarda, aynı anda
+İki uygulama aynı bilgisayarda, aynı Windows oturumunda birlikte çalışır ve birbirinin hiçbir şeyini kullanmaz
+(0.16.0'da ayrılan klasörler, tek örnek kilidi ve pencere adlarına ek olarak):
+- **Simgeler üst üste binmez:** Süreç Uzmanı'nın simgesi ilk açılışta sağ altta, Sayısal Tasarım Uzmanı'nın
+  simgesinin hemen solunda belirir (önceden ikisi de aynı köşeye, birbirinin üstüne yerleşiyordu). Sürüklenen
+  simgenin yeri her uygulamada ayrı hatırlanır.
+- **Ortam değişkenleri ayrı:** Süreç Uzmanı `SURECUZMANI_*` değişkenlerini okur (`SURECUZMANI_ORG_SETTINGS`,
+  `SURECUZMANI_LLM__MODEL` …). Sayısal Tasarım Uzmanı için verilen `TECHRAG_*` değişkenleri, örneğin BT'nin grup
+  ilkesiyle dağıttığı `TECHRAG_ORG_SETTINGS`, artık Süreç Uzmanı'na o uygulamanın kurum ayarlarını okutmaz.
+- **Kurum ayarları aynı ağ klasöründe durabilir:** Süreç Uzmanı'nın dosyası `SurecUzmani.kurum-ayarlari.yaml`
+  (Sayısal Tasarım Uzmanı'nınki `kurum-ayarlari.yaml`). Yönetici iki uygulama için aynı klasörü seçse de biri
+  diğerinin ayarlarını okumaz ve üzerine yazmaz.
+- Ortak kütüphane ve kullanım günlüğü klasörlerini iki uygulama için ayrı seçin (README §2.3.1).
+- Doğrulanan: testler (`tests/test_side_by_side.py`: uygulama klasörü, Windows iç adları, `TECHRAG_*` ve
+  `TECHRAG_ORG_SETTINGS`'in okunmaması, aynı klasörde iki kurum ayarı dosyası, simgenin diğerinin solunda ve
+  üzerine binmeden başlaması — 100 % ve 150 % ölçekte). Her biri eski davranışa geri alınınca başarısız oluyor.
+  İki exe gerçek bir Windows makinesinde birlikte denenmedi.
+
 ### 0.16.0 — Süreç Uzmanı: yeni ad ve simge
 Süreç Uzmanı, Sayısal Tasarım Uzmanı 0.15.3'ün kaynak kodundan başlatıldı; arama, cevaplama, doğrulama ve arayüz
 aynen devralındı. Bu sürümde değişenler:

@@ -11,7 +11,7 @@ from techrag.server import create_app
 
 @pytest.fixture()
 def client(cfg, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     with TestClient(create_app(cfg, engine, warmup=False, desktop=True)) as c:
         yield c
 

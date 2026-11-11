@@ -132,10 +132,10 @@ class FakeGuard:
 
 @pytest.fixture
 def gui(monkeypatch, tmp_path):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
-    monkeypatch.setenv("TECHRAG_PATHS__LIBRARY_DIR", str(tmp_path / "lib"))
-    monkeypatch.setenv("TECHRAG_NO_USER_SETTINGS", "1")
-    monkeypatch.delenv("TECHRAG_SMOKE", raising=False)
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_PATHS__LIBRARY_DIR", str(tmp_path / "lib"))
+    monkeypatch.setenv("SURECUZMANI_NO_USER_SETTINGS", "1")
+    monkeypatch.delenv("SURECUZMANI_SMOKE", raising=False)
     FakeLauncher.instances = []
     FakeGuard.running, FakeGuard.log = False, []
     monkeypatch.setattr(L, "SingleInstance", FakeGuard)
@@ -459,7 +459,7 @@ def test_without_a_launcher_the_window_opens_and_closes_normally(gui, monkeypatc
 
 
 def test_arguments_run_the_cli(monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("TECHRAG_NO_USER_SETTINGS", "1")
+    monkeypatch.setenv("SURECUZMANI_NO_USER_SETTINGS", "1")
     assert desktop.main(["--library", str(tmp_path / "lib"), "docs"]) in (0, 1)
     assert desktop.main(["selftest"]) == 0
     assert '"ok": true' in capsys.readouterr().out
@@ -535,22 +535,3 @@ def test_backend_port_is_the_same_at_every_start():
     assert taken.getsockname()[1] != port, "another free port while it is in use"
     second.close()
     taken.close()
-
-
-def test_the_app_folder_is_its_own_never_the_sayisal_tasarim_uzmani_ones(tmp_path):
-    from techrag.config import app_dir
-
-    assert app_dir(tmp_path).name == "SurecUzmani"
-    assert app_dir(tmp_path, lower=True).name == "surecuzmani"
-    for other in ("SayisalTasarimUzmani", "TechRAG", "sayisaltasarimuzmani", "techrag"):
-        (tmp_path / other).mkdir()
-    assert app_dir(tmp_path).name == "SurecUzmani", "settings, keys and library are not shared with the other app"
-    assert app_dir(tmp_path, lower=True).name == "surecuzmani"
-
-
-def test_internal_windows_names_differ_from_sayisal_tasarim_uzmani():
-    from techrag import launcher as L
-
-    names = [L.ACTIVATE_MESSAGE, L.Launcher.class_name("k")]
-    assert all(n.startswith("SurecUzmani.") for n in names), names
-    assert "TechRAG" not in " ".join(names)

@@ -78,7 +78,7 @@ def test_too_little_memory_at_start_is_only_logged(cfg, engine, tmp_path, monkey
 
     from techrag.server import create_app
 
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     calls = []
 
     def no_memory():

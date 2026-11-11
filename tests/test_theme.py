@@ -10,7 +10,7 @@ from techrag.server import create_app
 
 @pytest.fixture()
 def client(cfg, engine, tmp_path, monkeypatch):
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(tmp_path / "settings.json"))
     with TestClient(create_app(cfg, engine, warmup=False, desktop=True)) as c:
         yield c
 
@@ -51,7 +51,7 @@ def test_the_former_yellow_black_choice_becomes_dark(tmp_path, monkeypatch):
     from techrag.settings import load_user_settings
 
     path = tmp_path / "settings.json"
-    monkeypatch.setenv("TECHRAG_SETTINGS", str(path))
+    monkeypatch.setenv("SURECUZMANI_SETTINGS", str(path))
     path.write_text(json.dumps({"ui": {"theme": "yellow", "language": "tr"}}), encoding="utf-8")
     assert load_user_settings()["ui"] == {"theme": "dark", "language": "tr"}
 
