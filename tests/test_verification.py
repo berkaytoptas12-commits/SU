@@ -1,0 +1,352 @@
+"""Verification must never approve what it could not check (fake model server; this does not measure the
+accuracy of a real model)."""
+
+import json
+
+import httpx
+import pytest
+
+from conftest import judge_calls
+from fakeserver import sources_in
+from techrag.retrieval import Passage
+from techrag.tools import SourceRegistry
+from techrag.verify import (NOT_CHECKED, SUPPORTED, UNSUPPORTED, UNVERIFIED, deterministic_check, is_framing,
+                            parse_answer, parse_verdicts, split_claims)
+
+
+def final(engine, question, **kw):
+    events = list(engine.ask_stream(question, **kw))
+    return events, next(e for e in events if e["type"] == "final")
+
+
+def _registry(*texts, question=None):
+    reg = SourceRegistry()
+    for i, t in enumerate(texts):
+        reg.add_passage(Passage(1, "Doc", "d.pdf", "ddr", "s", 1, 1, "text", t, 1.0, [i], [i]))
+    if question:
+        reg.add_user_input(question)
+    return reg
+
+
+# ------------------------------------------------------------------------------ judge failures
+
+@pytest.mark.parametrize("judge", [
+    lambda msgs: httpx.Response(500, json={"error": "boom"}),
+    lambda msgs: (_ for _ in ()).throw(httpx.ReadTimeout("judge timed out")),
+    lambda msgs: "",
+    lambda msgs: "this is not json",
+    lambda msgs: json.dumps({"verdicts": []}),
+    lambda msgs: json.dumps({"result": "ok"}),
+    lambda msgs: json.dumps({"verdicts": [{"id": 999, "verdict": "supported"}]}),
+    lambda msgs: json.dumps({"verdicts": [{"id": i, "verdict": "probably"} for i in range(1, 20)]}),
+    lambda msgs: json.dumps({"verdicts": [{"id": i, "verdict": v} for i in range(1, 20) for v in ("supported", "supported")]}),
+    lambda msgs: json.dumps({"verdicts": [{"verdict": "supported"} for _ in range(20)]}),
+], ids=["http500", "timeout", "empty", "not-json", "no-verdicts", "wrong-schema", "unknown-id", "unknown-verdict",
+        "duplicate-id", "missing-id"])
+def test_judge_failure_never_approves(engine, fake, judge):
+    fake.judge = judge
+    _, fin = final(engine, "DDR5 tRFC değeri nedir?")
+    v = fin["verification"]
+    assert v["judge"]["called"] is True and v["judge"]["completed"] is False
+    assert v["supported"] == 0 and v["status"] == "unverified"
+    assert "295" not in fin["answer"], "unverified statements must not be shown as the answer"
+    assert all(c["status"] in (UNVERIFIED, UNSUPPORTED) for c in v["details"])
+    assert any(c["judge"]["error"] for c in v["details"])
+
+
+def test_judge_gets_one_retry_for_missing_verdicts(engine, fake):
+    state = {"n": 0}
+    real = fake._judge
+
+    def flaky(msgs):
+        state["n"] += 1
+        return "" if state["n"] == 1 else real(msgs)
+    fake.judge = flaky
+    _, fin = final(engine, "DDR5 tRFC değeri nedir?")
+    v = fin["verification"]
+    assert v["status"] == "supported" and v["judge"]["completed"], "valid verdicts on the retry are accepted"
+    assert len(judge_calls(fake)) >= 2
+
+
+def test_parse_verdicts_is_strict():
+    ok = parse_verdicts({"verdicts": [{"id": "1", "verdict": "Supported"}, {"id": 2, "verdict": "partial", "reason": "x"}]}, [1, 2, 3])
+    assert ok[1][0] == "supported" and ok[2] == ("partial", "x") and ok[3][0] == "missing"
+    assert parse_verdicts(None, [1])[1][0] == "invalid"
+    assert parse_verdicts({"verdicts": [{"id": True, "verdict": "supported"}]}, [1])[1][0] == "missing"
+    dup = parse_verdicts({"verdicts": [{"id": 1, "verdict": "supported"}, {"id": 1, "verdict": "unsupported"}]}, [1])
+    assert dup[1][0] == "invalid"
+
+
+def test_judge_switched_off_is_not_reported_as_verified(engine, fake, cfg):
+    cfg.answer.judge = False
+    _, fin = final(engine, "DDR5 tRFC değeri nedir?")
+    v = fin["verification"]
+    assert v["status"] == "not_checked" and v["judge"]["enabled"] is False and v["judge"]["called"] is False
+    assert all(c["status"] == NOT_CHECKED for c in v["details"] if c["outcome"] == "kept")
+    assert not judge_calls(fake)
+
+
+def test_verification_switched_off(engine, fake, cfg):
+    cfg.answer.verify = False
+    _, fin = final(engine, "DDR5 tRFC değeri nedir?")
+    assert fin["verification"]["status"] == "not_checked" and fin["verification"]["deterministic"]["enabled"] is False
+
+
+# ------------------------------------------------------------------ question is not evidence
+
+def test_number_from_the_question_is_not_evidence():
+    reg = _registry("The limit tLIM shall be 100 ns.", question="Sınır 999 ns mi?")
+    user = reg.items[-1].n
+    claims = split_claims(f"Sınır 999 ns [1].\nSınır 999 ns [1][{user}].\nVerdiğiniz 999 ns değeri sınırdan büyüktür [1][{user}].")
+    deterministic_check(claims, reg)
+    assert claims[0].status == UNSUPPORTED and "not found in the cited sources" in claims[0].reasons[0]
+    assert claims[1].status == UNSUPPORTED and "presented as documented" in " ".join(claims[1].reasons)
+    assert claims[2].status == "pending", "a clearly attributed user value may be used"
+    assert claims[2].uses_user_input and {v["from"] for v in claims[2].values} == {"user", "document"} or \
+        any(v["from"] == "user" for v in claims[2].values)
+
+
+def test_question_value_end_to_end(engine, fake):
+    def echo(msgs, tools):
+        n = min(k for k, t in sources_in(msgs).items() if "tRFC" in t)
+        return {"content": f"Evet, sınır 999 ns [{n}].\n\n### Kaynaklarda belirtilen\n- tRFC sınırı 999 ns [{n}]."}
+    fake.answer = echo
+    _, fin = final(engine, "DDR5 tRFC sınırı 999 ns mi?")
+    assert "999" not in fin["answer"]
+    assert fin["verification"]["status"] in ("not_found", "corrected")
+    assert any(s["kind"] == "user" for s in fin["sources"])
+
+
+def test_calculation_with_untraceable_input_is_not_verified(engine, fake):
+    def calc(msgs, tools):
+        if tools and not any(m.get("role") == "tool" for m in msgs):
+            return {"tool_calls": [{"name": "calculate", "arguments": {"expression": "295e-9*1.37e9", "label": "cycles"}}]}
+        n = max(sources_in(msgs))
+        return {"content": f"tRFC is about 404 clock cycles [{n}]."}
+    fake.answer = calc
+    events, fin = final(engine, "DDR5 tRFC kaç saat çevrimi?")
+    calc_src = next(s for s in fin["sources"] if s["kind"] == "calc")
+    assert calc_src["extra"]["traceable"] is False
+    assert [i["value"] for i in calc_src["extra"]["inputs"] if not i["sources"]] == ["1.37e9"]
+    assert "404" not in fin["answer"]
+
+
+def test_calculation_inputs_are_traced_to_sources(engine, fake):
+    def calc(msgs, tools):
+        if tools and not any(m.get("role") == "tool" for m in msgs):
+            return {"tool_calls": [{"name": "calculate", "arguments": {"expression": "295e-9*1e9", "label": "ns"}}]}
+        src = sources_in(msgs)
+        n = max(src)
+        doc = min(k for k, t in src.items() if "295" in t and "Calculation" not in t)
+        return {"content": f"tRFC equals 295 ns [{doc}], i.e. 295 in nanoseconds [{n}]."}
+    fake.answer = calc
+    _, fin = final(engine, "DDR5 tRFC kaç nanosaniye?")
+    calc_src = next(s for s in fin["sources"] if s["kind"] == "calc")
+    assert calc_src["extra"]["traceable"] is True and calc_src["extra"]["inputs"][0]["sources"]
+    kept = [c for c in fin["verification"]["details"] if c["outcome"] == "kept"]
+    rec = next(e for c in kept for e in c["evidence"] if e["kind"] == "calc")
+    assert rec["status"] == "not_applicable" and rec["inputs"][0]["locations"], "inputs point to their sources"
+
+
+# --------------------------------------------------------------- claims cannot dodge the check
+
+def test_uncited_lead_and_heading_placement_do_not_skip_checks():
+    reg = _registry("DDR5 devices support on-die ECC. tRFC is 295 ns.")
+    ans = ("DDR5 tRFC 999 ns'dir.\nDDR5 devices support on-die ECC.\n\n### Documented\n- tRFC is 295 ns [1].\n\n"
+           "### Engineering inference (not stated in the sources)\n- Use a longer refresh window.")
+    claims = split_claims(ans)
+    deterministic_check(claims, reg)
+    st = {c.text: c for c in claims}
+    assert st["DDR5 tRFC 999 ns'dir."].status == UNSUPPORTED
+    assert st["DDR5 devices support on-die ECC."].status == UNSUPPORTED, "non-numeric technical claims need a citation"
+    assert "no citation" in st["Use a longer refresh window."].reasons[0], "inference must cite its premises"
+    assert st["tRFC is 295 ns [1]."].status == "pending"
+
+
+def test_framing_vs_technical():
+    assert is_framing("Merhaba!") and is_framing("Detaylar aşağıda:") and is_framing("### Kaynaklarda belirtilen")
+    assert is_framing("Bu bilgi yüklenen dokümanlarda bulunamadı.")
+    assert not is_framing("DDR5 devices support on-die ECC.")
+    assert not is_framing("tRFC 295 ns.")
+
+
+def test_answer_without_checkable_statements_is_not_a_success(engine, fake):
+    fake.answer = lambda msgs, tools: {"content": "Here you go:\n\n### Documented"}
+    _, fin = final(engine, "DDR5 tRFC?")
+    v = fin["verification"]
+    assert v["status"] == "unverified" and v["parse_failed"] and v["supported"] == 0
+
+
+def test_answer_is_rebuilt_from_verified_claims_only(engine, fake):
+    def mixed(msgs, tools):
+        n = min(k for k, t in sources_in(msgs).items() if "295" in t)
+        return {"content": f"tRFC is 295 ns [{n}]. It is 999 ns in turbo mode [{n}].\n\n### Documented\n"
+                           f"- tRFC is 295 ns [{n}].\n- DDR5 has no refresh at all [{n}]."}
+    fake.answer = mixed
+    fake.judge = lambda msgs: json.dumps({"verdicts": [
+        {"id": int(b.split(":")[0]), "verdict": "unsupported" if "no refresh" in b else "supported"}
+        for b in msgs[-1]["content"].split("CLAIM ")[1:]]})
+    _, fin = final(engine, "DDR5 tRFC?")
+    assert "999" not in fin["answer"] and "no refresh" not in fin["answer"]
+    assert "295 ns" in fin["answer"] and fin["verification"]["status"] == "corrected"
+    removed = [c for c in fin["verification"]["details"] if c["outcome"] == "removed"]
+    assert {c["status"] for c in removed} == {UNSUPPORTED}
+
+
+def test_parse_answer_keeps_structure():
+    p = parse_answer("Lead [1].\n\n```\ncode line\n```\n| A | B |\n|---|---|\n| x | 1 V [1] |")
+    kinds = [ln.kind for ln in p.lines]
+    assert kinds == ["text", "blank", "fence", "code", "fence", "table_head", "table_sep", "table_row"]
+    assert SUPPORTED == "supported"
+
+
+def test_values_only_in_a_page_image_transcription_are_unverified():
+    reg = SourceRegistry()
+    reg.add_page(1, 7, "Doc", "(VLM transcription) Figure 3-2: tRFC window 412 ns\n\nPage text (text layer):\nFigure 3-2 Refresh timing",
+                 {}, evidence_text="Figure 3-2 Refresh timing")
+    claims = split_claims("The refresh window is 412 ns [1].")
+    deterministic_check(claims, reg)
+    assert claims[0].status == UNVERIFIED and "page-image transcription" in claims[0].reasons[0]
+
+
+# ------------------------------------------------------------------ review findings (answer parsing)
+
+def _parsed_claims(text):
+    return [c.text for c in split_claims(text)]
+
+
+def test_not_found_sentence_does_not_hide_a_statement():
+    assert _parsed_claims("Bu bilgi yüklenen dokümanlarda bulunamadı.") == []
+    assert len(_parsed_claims("This information was not found in the loaded documents, but DDR5 tRFC for 16Gb is "
+                              "410 ns [1].")) == 1
+    assert len(_parsed_claims("This information was not found in the loaded documents, but DDR5 has no ODT.")) == 1
+
+
+def test_openers_do_not_exempt_statements():
+    for s in ("Sure, DDR5 devices do not support on-die ECC.", "Summary: refresh is optional in DDR5.",
+              "Kısaca: DDR5'te ODT yoktur."):
+        assert not is_framing(s), s
+    for s in ("Merhaba!", "Umarım yardımcı olur.", "Here are the details:", "Thanks for asking."):
+        assert is_framing(s), s
+
+
+def test_statements_written_as_headings_or_bold_are_checked():
+    from techrag.verify import render
+
+    ans = "**DDR5 tRFC for 16Gb devices is 410 ns.**\n\n### Answer: 999 ns\n\n### PCIe 5.0 LTSSM\n\ntRFC is 295 ns [1]."
+    p = parse_answer(ans)
+    assert [c.text for c in p.claims] == ["**DDR5 tRFC for 16Gb devices is 410 ns.**", "Answer: 999 ns",
+                                          "tRFC is 295 ns [1]."]
+    out = render(p, lambda c: "keep" if "295" in c.text else "drop")
+    assert "410" not in out and "999" not in out and "### PCIe 5.0 LTSSM" in out and "295 ns" in out
+    assert is_framing("### Kaynaklarda belirtilen") and not is_framing("### tRFC: 350 ns")
+
+
+def test_table_header_values_and_short_rows_are_checked():
+    from techrag.verify import render
+
+    p = parse_answer("| tRFC 16Gb | 410 ns |\n|---|---|\n| ODT | Disabled |\n\nDone [1].")
+    assert [c.text for c in p.claims] == ["| tRFC 16Gb | 410 ns |", "| ODT | Disabled |", "Done [1]."]
+    out = render(p, lambda c: "drop" if "410" in c.text else "keep")
+    assert "|" not in out, "rows cannot stand without the header that failed"
+    p = parse_answer("| Parameter | Value |\n|---|---|\n| **Timing** | |\n| tRFC | 295 ns [1] |")
+    assert [c.text for c in p.claims] == ["| tRFC | 295 ns [1] |"], "column labels and group rows are structure"
+
+
+def test_page_and_section_numbers_are_no_evidence_for_values():
+    reg = SourceRegistry()
+    reg.add_passage(Passage(1, "Doc", "d.pdf", "ddr", "3.2 Refresh", 32, 32, "text",
+                            "DDR5 has eight bank groups. tRFC is 295 ns.", 1.0, [1], [1]))
+    claims = split_claims("DDR5 devices have 32 bank groups [1].\nSee section 3.2: tRFC is 295 ns [1].")
+    deterministic_check(claims, reg)
+    assert claims[0].status == UNSUPPORTED and "number '32' not found" in claims[0].reasons[0]
+    assert claims[1].status == "pending", "a section reference may point at the source's section"
+
+
+def test_calculation_needs_a_sourced_input_and_its_label_is_no_evidence():
+    from techrag.tools import trace_inputs
+
+    reg = _registry("tRFC is 295 ns. The device has 16 banks.")
+    assert trace_inputs("4*4", reg)[1] is False and trace_inputs("3*100+5*10", reg)[1] is False
+    assert trace_inputs("295*2", reg)[1] is True
+    assert trace_inputs("16*8", reg, [{"value": "16", "source": 1}])[1] is True, "a declared small constant counts"
+    inputs, ok = trace_inputs("4*4", reg)
+    calc, _ = reg.add_calc("4*4", "16", inputs, ok, label="tRFC for 16Gb is 410 ns")
+    assert "410" not in calc.evidence() and "410" in calc.text
+    claims = split_claims(f"DDR5 tRFC for 16Gb is 410 ns [{calc.n}].")
+    deterministic_check(claims, reg)
+    assert claims[0].status == UNSUPPORTED
+
+
+def test_user_value_needs_an_attribution_in_its_own_clause():
+    from techrag.tools import trace_inputs
+
+    reg = _registry("The limit tLIM shall be 100 ns.", question="Sınır 999 ns mi?")
+    u = reg.items[-1].n
+    claims = split_claims(f"For the given speed grade, tRFC is 999 ns [1][{u}].\n"
+                          f"Tabloda verilen tRFC değeri 999 ns'dir [1][{u}].\n"
+                          f"Verdiğiniz 999 ns değeri sınırdan büyüktür [1][{u}].")
+    deterministic_check(claims, reg)
+    assert [c.status for c in claims] == [UNSUPPORTED, UNSUPPORTED, "pending"]
+    inputs, ok = trace_inputs("999*1", reg)
+    calc, _ = reg.add_calc("999*1", "999", inputs, ok)
+    claims = split_claims(f"tRFC is 999 clock cycles [{calc.n}].")
+    deterministic_check(claims, reg)
+    assert claims[0].uses_user_input and claims[0].status == UNSUPPORTED, "a calculation on a user value"
+
+
+def test_judge_sees_the_rows_a_claim_relies_on():
+    from techrag.engine import judge_excerpt
+
+    table = "Table 5 Timing\n| Param | Value |\n|---|---|\n" + "\n".join(f"| tX{i} | {100 + i} ns |" for i in range(600))
+    out = judge_excerpt(table, "tX550 is 650 ns [1]", 6000)
+    assert len(out) <= 6000 and "| tX550 | 650 ns |" in out and out.startswith("Table 5 Timing")
+    assert judge_excerpt("short", "x", 6000) == "short"
+
+
+# ------------------------------------------------------------------------------ values printed in tables
+
+def _det(source_text: str, claim: str, param=None) -> list[str]:
+    from techrag.store import ParameterRow
+
+    reg = SourceRegistry()
+    if param:
+        reg.add_parameter(ParameterRow(1, 1, None, "ddr", 12, "", "Table 6 Recommended DC operating conditions",
+                                       "Supply voltage", "VDD", *param, "V", "", "", True, "JESD79-4C",
+                                       "grounded"), {})
+    else:
+        reg.add_passage(Passage(1, "JESD79-4C", "d.pdf", "ddr", "s", 12, 12, "text", source_text, 1.0, [1], [1]))
+    claims = parse_answer(claim).claims
+    deterministic_check(claims, reg)
+    return claims[0].reasons
+
+
+@pytest.mark.parametrize("source, claim", [
+    ("Supply Voltage VDD 1.14 1.2 1.26 V", "VDD typ 1.2 V'tur [1]."),
+    ("Parameter Symbol Min Typ Max Unit\nSupply Voltage VDD 1.14 1.2 1.26 V", "VDD en az 1.14 V'tur [1]."),
+    ("Symbol | Min | Typ | Max | Units\nVDD | 1.14 | 1.20 | 1.26 | V", "VDD tipik 1,2 V'tur [1]."),
+    ("Supply Voltage\nVDD\n1.14\n1.2\n1.26\nV", "VDD max 1.26 V and min 1.14 V [1]."),
+    ("| Parameter | Min (V) | Max (V) |\n|---|---|---|\n| VDD | 1.14 | 1.26 |", "VDD max is 1.26 V [1]."),
+    ("The differential output swing is 800 mVpp minimum.", "The swing is at least 800 mV [1]."),
+    ("Supports 1.2-V and 1.8-V signaling.", "1.2 V signaling is supported [1]."),
+    ("VDD = 1.2 V ± 0.06 V", "VDD is 1200 mV ± 60 mV [1]."),
+])
+def test_values_whose_unit_stands_in_its_own_table_cell_are_found(source, claim):
+    assert _det(source, claim) == []
+
+
+@pytest.mark.parametrize("source, claim", [
+    ("Symbol | Min | Typ | Max | Units\nVDD | 1.14 | 1.20 | 1.26 | V", "VDD tipik 1.25 V'tur [1]."),
+    ("Symbol | Min | Typ | Max | Units\nVDD | 1.14 | 1.20 | 1.26 | V", "VDD tipik 1.2 ns'dir [1]."),
+    ("Section 3.2 describes VDD.", "VDD 3.2 V'tur [1]."),
+    ("tRFC 350 ns\nVDD 1.2 V", "VDD 350 V'tur [1]."),
+])
+def test_table_reading_does_not_accept_other_values(source, claim):
+    assert any("not found in the cited sources" in r for r in _det(source, claim))
+
+
+def test_verified_parameter_row_values_are_found_with_their_unit():
+    row = ("1.14", "1.2", "1.26")
+    assert _det("", "VDD typ değeri 1.2 V'tur [1].", row) == []
+    assert _det("", "VDD 1140 mV ile 1260 mV arasındadır [1].", row) == []
+    assert _det("", "VDD typ değeri 1.3 V'tur [1].", row)

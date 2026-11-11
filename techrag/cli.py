@@ -1,0 +1,611 @@
+"""Command line: techrag <command> ...   (the desktop exe accepts the same commands: SayisalTasarimUzmani.exe ingest ...)"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Optional
+
+from techrag.config import APP_TITLE, Config, load_config
+
+
+def _print(msg: str = "") -> None:
+    print(msg, flush=True)
+
+
+def _engine(cfg: Config):
+    from techrag.engine import RAGEngine
+
+    return RAGEngine(cfg)
+
+
+def _src_line(s: dict) -> str:
+    if s.get("kind") == "calc":
+        return f"  [{s['n']}] calc: {s['text']}"
+    if s.get("kind") == "user":
+        return f"  [{s['n']}] user input (from the question, not a document)"
+    pages = f"p.{s['page_start']}" if s["page_start"] == s["page_end"] else f"p.{s['page_start']}-{s['page_end']}"
+    std = f" [{', '.join(s.get('entities') or [])}]" if s.get("entities") else ""
+    kind = f" ({s['kind']})" if s.get("kind") not in (None, "passage") else ""
+    return f"  [{s['n']}]{std} {s['doc_title']} — {s.get('section') or '-'} — {pages}{kind}"
+
+
+# --------------------------------------------------------------------------- commands
+
+def cmd_ingest(cfg: Config, args) -> int:
+    from techrag.ingest.pipeline import Ingestor
+
+    if cfg.read_only:
+        _print("The library is configured read-only.")
+        return 2
+    e = _engine(cfg)
+    vision = None if args.no_vlm else e.vision
+    llm = e.llm if (cfg.llm.model and not args.no_llm_meta) else None
+    if vision is None and not args.no_vlm:
+        _print("note: no vision model configured -> tables from PDF text only (Settings > Vision)")
+    ing = Ingestor(cfg, e.shared, e.embedder, e.domains, progress=_print, llm=llm, vision=vision)
+    report = ing.run(Path(args.path) if args.path else None, rebuild=args.rebuild, prune=not args.no_prune)
+    _print("\n" + report.summary())
+    for path, err in report.failed.items():
+        _print(f"  FAILED {path}: {err}")
+    return 1 if report.failed else 0
+
+
+def _ingestor(cfg: Config, args):
+    from techrag.ingest.pipeline import Ingestor
+
+    e = _engine(cfg)
+    vision = None if getattr(args, "no_vlm", False) else e.vision
+    llm = e.llm if (cfg.llm.model and not getattr(args, "no_llm_meta", False)) else None
+    return e, Ingestor(cfg, e.shared, e.embedder, e.domains, progress=_print, llm=llm, vision=vision)
+
+
+def _print_report(report) -> int:
+    _print("\n" + report.summary())
+    for path in report.missing:
+        _print(f"  MISSING (kept, excluded from answers; 'techrag purge-missing' removes it): {path}")
+    for path in report.unreachable[:20]:
+        _print(f"  UNREACHABLE (folder could not be read, left unchanged): {path}")
+    for path, err in report.failed.items():
+        _print(f"  FAILED {path}: {err}")
+    return 1 if report.failed else 0
+
+
+def cmd_add_folder(cfg: Config, args) -> int:
+    from techrag.ingest.sources import scan_root
+
+    if cfg.read_only:
+        _print("The library is configured read-only.")
+        return 2
+    folder = Path(args.folder).expanduser()
+    scan = scan_root(folder)
+    if not scan.reachable:
+        _print(f"Folder not reachable: {folder} ({scan.error})")
+        return 2
+    _print(f"{folder}: {len(scan.files)} document(s), {scan.unsupported_count} unsupported file(s)")
+    for b in scan.buckets():
+        _print(f"  bucket {b['name'] or '(general: files directly in the folder)'}: {b['documents']}")
+    if args.preview:
+        return 0
+    e, ing = _ingestor(cfg, args)
+    root_id = e.shared.add_root(str(folder))
+    return _print_report(ing.sync_root(root_id, rebuild=args.rebuild))
+
+
+def cmd_rescan(cfg: Config, args) -> int:
+    if cfg.read_only:
+        _print("The library is configured read-only.")
+        return 2
+    _, ing = _ingestor(cfg, args)
+    return _print_report(ing.sync_all(rebuild=args.rebuild))
+
+
+def cmd_purge_missing(cfg: Config, args) -> int:
+    from techrag.store import Store
+
+    if cfg.read_only:
+        _print("the library is opened read-only: nothing removed")
+        return 1
+    for p in Store(cfg.db_path).purge_missing():
+        _print(f"removed from index: {p}")
+    return 0
+
+
+def cmd_inspect(cfg: Config, args) -> int:
+    from techrag.ingest.pipeline import build_chunks, page_texts
+    from techrag.ingest.structure import SECTION_SEP
+    from techrag.ingest.vlm import page_candidates
+
+    doc, blocks, chunks = build_chunks(cfg, Path(args.file))
+    _print(f"{doc.title}: {doc.n_pages} pages, {len(doc.toc)} outline entries, {len(blocks)} blocks, {len(chunks)} chunks")
+    for w in doc.warnings:
+        _print(f"  warning: {w}")
+    if args.table_pages:
+        sel = page_candidates(page_texts(blocks), doc.page_stats, cfg.vision.min_page_score, doc.pages)
+        _print(f"  VLM table pages (table signal, score >= {cfg.vision.min_page_score}): {len(sel)} -> "
+               f"{sorted(sel)[:60]}")
+    for c in chunks[args.start:args.start + args.limit]:
+        _print(f"\n--- chunk {c.ordinal} [{c.kind}] p.{c.page_start}-{c.page_end} ~{c.tokens} tok")
+        _print(f"    section: {SECTION_SEP.join(c.section) or '-'}")
+        _print(c.text[: args.chars] + (" ..." if len(c.text) > args.chars else ""))
+    return 0
+
+
+def cmd_search(cfg: Config, args) -> int:
+    e = _engine(cfg)
+    if args.no_rewrite:
+        e.planner.use_llm = False
+    res = e.retrieve(args.query, domains=args.domain, doc_ids=args.doc, top_k=args.k)
+    p = res.plan
+    _print(f"language={p.language} type={p.question_type} english={p.english!r}")
+    _print(f"scope={res.scope.reason} entities={res.scope.entities} candidates={res.candidates} timings={res.timings}")
+    for i, ps in enumerate(res.passages, 1):
+        _print(f"\n[{i}] {', '.join(ps.entities)} {ps.doc_title} — {ps.section} — p.{ps.page_start}-{ps.page_end} "
+               f"(score {ps.score:.3f}{', fig p.' + str(ps.figure_page) if ps.figure_page else ''})")
+        _print("    " + ps.text[: args.chars].replace("\n", "\n    "))
+    if res.parameters:
+        _print("\nParameter rows:")
+        for r in res.parameters:
+            _print(f"  {r.doc_title} p.{r.page}: {r.line()}")
+    return 0
+
+
+def _stream(e, question: str, history: list, args, pending: Optional[dict] = None) -> tuple[str, Optional[dict]]:
+    """Prints the answer; returns it with the clarifying question it asks back (if any)."""
+    answer = ""
+    asked = None
+    for ev in e.ask_stream(question, history, domains=args.domain, doc_ids=args.doc, clarification=pending):
+        kind = ev["type"]
+        if kind == "status" and args.verbose:
+            _print(f"({ev['stage']})")
+        elif kind == "plan" and args.verbose:
+            _print(f"(scope: {ev['scope']}, thinking: {ev['thinking']}, english: {ev['plan']['english']!r})")
+        elif kind == "tool":
+            _print(f"  > {ev['name']}: {ev['summary']}")
+        elif kind == "plan" and ev.get("merged_question"):
+            _print(f"(question: {ev['merged_question']})")
+        elif kind == "final":
+            answer = ev["answer"]
+            if ev.get("notice"):
+                _print("\n" + ev["notice"])
+            _print("\n" + answer + "\n")
+            v = ev["verification"]
+            j = v.get("judge", {})
+            judge = ("judge off" if not j.get("enabled") else "judge completed" if j.get("completed")
+                     else "judge NOT completed" if j.get("called") else "judge not needed")
+            _print(f"verification: {v['status']} — {v['supported']} supported, {v['unsupported']} unsupported, "
+                   f"{v['unverified']} unverified, {v['not_checked']} not checked; {judge}"
+                   + (f"; {len(v['removed'])} removed" if v["removed"] else "")
+                   + (" (regenerated once)" if v["regenerated"] else ""))
+            for c in v["details"]:
+                if c.get("outcome") in ("removed", "flagged"):
+                    _print(f"  - {c['outcome']} ({c['status']}): {c['text']}\n      reason: "
+                           f"{'; '.join(c['reasons']) or c['judge'].get('error', '')}")
+            cited = [s for s in ev["sources"] if s.get("cited")]
+            if cited:
+                _print("Sources:")
+                for s in cited:
+                    _print(_src_line(s))
+            if args.verbose:
+                _print(f"(timings: {ev['timings']})")
+        elif kind == "clarify":
+            asked = ev.get("pending")
+            for i, q in enumerate(ev.get("questions") or [], 1):
+                if q["options"]:
+                    _print(f"  {i}. " + " | ".join(o["label"] for o in q["options"]))
+        elif kind == "error":
+            _print(f"ERROR: {ev['message']}")
+    return answer, asked
+
+
+def cmd_ask(cfg: Config, args) -> int:
+    e = _engine(cfg)
+    if args.json:
+        _print(json.dumps(e.ask(args.question, domains=args.domain, doc_ids=args.doc), ensure_ascii=False, indent=2))
+        return 0
+    _stream(e, args.question, [], args)
+    return 0
+
+
+def cmd_chat(cfg: Config, args) -> int:
+    e = _engine(cfg)
+    history: list[dict] = []
+    pending: Optional[dict] = None
+    _print("techrag chat — /q to quit, /reset to clear history")
+    while True:
+        try:
+            q = input("\n> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return 0
+        if q in ("/q", "/quit", "/exit"):
+            return 0
+        if q == "/reset":
+            history.clear()
+            pending = None
+            continue
+        if not q:
+            continue
+        try:
+            a, pending = _stream(e, q, history, args, pending)
+        except Exception as exc:
+            _print(f"ERROR: {exc}")
+            continue
+        history += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
+
+
+def cmd_quality(cfg: Config, args) -> int:
+    """The indexing quality report (counts of the indexing; not a measure of answer accuracy)."""
+    from techrag.store import Store
+
+    store = Store(cfg.db_path, read_only=True)
+    records = store.quality()
+    if records is None:
+        _print("No quality information in this library (created by an older version).")
+        return 0
+    runs = store.ingest_runs(1)
+    if runs:
+        r, q = runs[0], runs[0]["summary"]
+        v, t = q.get("vlm", {}), q.get("tables", {})
+        _print(f"last run: {r['kind']} {r['finished_at'] or r['started_at']} {r['status']}")
+        _print(f"  documents: processed={q.get('processed', 0)} unchanged={q.get('skipped_unchanged', 0)} "
+               f"reused={q.get('reused', 0)} partial={q.get('partial', 0)} failed={q.get('failed', 0)} "
+               f"unreachable={q.get('unreachable', 0)} missing={q.get('missing', 0)}")
+        if v.get("enabled") is False:
+            _print("  VLM: off (tables from the PDF text only)")
+        else:
+            _print(f"  VLM pages: selected={v.get('selected', 0)} with_tables={v.get('with_tables', 0)} "
+                   f"no_table={v.get('no_table', 0)} failed={v.get('failed', 0)} filtered_out={v.get('filtered_out', 0)} "
+                   f"over_limit={v.get('over_limit', 0)} cached={v.get('cached', 0)}")
+        _print(f"  tables: extracted={t.get('extracted', 0)} grounded={t.get('grounded', 0)}; parameter rows verified "
+               f"{t.get('rows_verified', 0)}/{t.get('rows', 0)} (denominator: rows extracted by the VLM)")
+    paths = {d.path for d in store.documents()}
+    for path in sorted(paths - set(records)):
+        _print(f"  NO RECORD (indexed before the report existed): {path}")
+    for path, rec in sorted(records.items()):
+        if rec["status"] == "ok" and not args.all:
+            continue
+        _print(f"  {rec['status'].upper()} {path}" + (f" (stage: {rec['stage']})" if rec["stage"] else "")
+               + (" - earlier index kept" if rec["index_kept"] else "") + (" - needs reprocessing" if
+                                                                           rec["needs_reprocess"] else ""))
+        for it in (rec.get("data") or {}).get("issues", []):
+            where = f" p.{it['page']}" if it.get("page") else ""
+            _print(f"      {it['code']}{where} {it.get('table', '')} {it.get('detail', '')}".rstrip())
+    return 0
+
+
+def cmd_retry(cfg: Config, args) -> int:
+    if cfg.read_only:
+        _print("The library is configured read-only.")
+        return 2
+    _, ing = _ingestor(cfg, args)
+    report = ing.retry_failed(args.path or None)
+    for key, r in report.retry.items():
+        _print(f"  retry {key}: {r.get('scope')} {r.get('pages') or ''} -> {r.get('result', 'done')}")
+    return _print_report(report)
+
+
+def cmd_stats(cfg: Config, args) -> int:
+    from techrag.store import Store
+
+    _print(json.dumps(Store(cfg.db_path, read_only=True).stats(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_docs(cfg: Config, args) -> int:
+    from techrag.store import Store
+
+    for d in Store(cfg.db_path, read_only=True).documents():
+        flags = []
+        if d.doc_type != "base":
+            flags.append(d.doc_type.upper())
+        if d.superseded_by:
+            flags.append(f"superseded by #{d.superseded_by}")
+        if d.warnings:
+            flags.append(f"{len(d.warnings)} warning(s)")
+        if d.legacy:
+            flags.append("legacy index (run: techrag migrate)")
+        if d.missing:
+            flags.append("SOURCE MISSING")
+        _print(f"{d.id:>4} [{(d.bucket or 'Genel')[:14]:<14}] {', '.join(d.entities) or '-':<16} {d.title} "
+               f"(rev {d.revision or '-'}, {d.n_pages} p., {d.n_chunks} chunks) {' | '.join(flags)}")
+    return 0
+
+
+def cmd_migrate(cfg: Config, args) -> int:
+    from techrag.ingest.pipeline import migrate_index
+    from techrag.store import Store
+
+    if cfg.read_only:
+        _print("The library is configured read-only; migrate a writable copy, then publish it again.")
+        return 2
+    store = Store(cfg.db_path)
+    rep = migrate_index(cfg, store, _print)
+    _print(json.dumps(rep, ensure_ascii=False, indent=2))
+    if rep["needs_reindex"]:
+        _print("Some content needs a full re-index (techrag ingest --rebuild; VLM results come from the cache, "
+               "only embeddings are recomputed).")
+    return 0
+
+
+def cmd_publish(cfg: Config, args) -> int:
+    from techrag.store import Store
+
+    try:
+        target = Store(cfg.db_path, read_only=cfg.read_only).publish(args.dest, cfg.sources_dir, cfg.vlm_cache_dir)
+    except ValueError as exc:
+        _print(f"not published: {exc}")
+        return 1
+    _print(f"published to {target.parent}")
+    return 0
+
+
+def cmd_models(cfg: Config, args) -> int:
+    from techrag.api import APIClient
+
+    for name in ("llm", "vision", "embedding", "reranker"):
+        svc = cfg.vision_service() if name == "vision" else getattr(cfg, name)
+        try:
+            models = APIClient(svc).list_models()
+            _print(f"{name:<10} {svc.base_url}: {', '.join(models) or '(none)'}   selected: {svc.model or '-'}")
+        except Exception as exc:
+            _print(f"{name:<10} {svc.base_url}: ERROR {exc}")
+    return 0
+
+
+def cmd_cert(cfg: Config, args) -> int:
+    """Show the certificate an HTTPS endpoint presents, whether the current trust settings accept it, and
+    optionally trust it (saved under the settings folder and added to tls.ca_bundle)."""
+    from techrag import tls
+    from techrag.api import normalize_base_url
+    from techrag.settings import settings_path, update_settings
+
+    url = normalize_base_url(args.url)
+    host, port, scheme = tls.host_port(url)
+    if scheme != "https":
+        _print(f"{url} is not https:// - no certificate involved.")
+        return 0
+    try:
+        chain = tls.fetch_chain(host, port)
+    except Exception as exc:
+        code = tls.classify(exc)
+        _print(f"cannot read the certificate of {host}:{port}: {exc}\n{tls.HINTS[code]}")
+        return 1
+    for i, der in enumerate(chain):
+        info = tls.describe(der)
+        _print(f"[{i}] subject : {info.subject}{'  (self-signed)' if info.self_signed else ''}")
+        _print(f"    issuer  : {info.issuer}")
+        _print(f"    names   : {', '.join(info.names) or '-'}")
+        _print(f"    valid   : {info.not_before} -> {info.not_after}")
+        _print(f"    sha256  : {info.sha256}")
+    ok, code, msg = tls.check_handshake(host, port, tls.build_context(cfg.tls.system_store, cfg.tls.ca_bundle))
+    _print(f"\nverification with current settings: {'OK' if ok else 'FAILED - ' + msg}")
+    if not ok:
+        _print(tls.HINTS[code])
+    if args.save:
+        _print(f"saved: {_save_to(chain, args.save)}")
+    if args.trust and not ok:
+        if code != tls.TLS_UNTRUSTED:
+            _print("not trusting: the problem is not an unknown issuer (see the hint above).")
+            return 1
+        expected = tls.describe(chain[0]).sha256
+        if not args.yes:
+            answer = input(f"Trust {host}:{port} with fingerprint {expected}? [y/N] ").strip().lower()
+            if answer not in ("y", "yes", "e", "evet"):
+                return 1
+        path = tls.save_chain(chain, settings_path().parent / "certs", host, port)
+        files = [f for f in cfg.tls.ca_bundle.split(";") if f.strip()]
+        if str(path) not in files:
+            files.append(str(path))
+        new_cfg = update_settings(cfg, {"tls": {"ca_bundle": ";".join(files)}})
+        _print(f"trusted: {path} (added to settings tls.ca_bundle)")
+        ok, _, msg = tls.check_handshake(host, port, tls.build_context(new_cfg.tls.system_store, new_cfg.tls.ca_bundle))
+        _print(f"verification with the new settings: {'OK' if ok else 'FAILED - ' + msg}")
+    return 0 if ok else 1
+
+
+def _save_to(chain, target: str) -> str:
+    import ssl
+
+    Path(target).write_text("".join(ssl.DER_cert_to_PEM_cert(c) for c in chain), encoding="ascii")
+    return target
+
+
+def cmd_doctor(cfg: Config, args) -> int:
+    from techrag.api import check_service
+    from techrag.settings import settings_path
+
+    ok = True
+
+    def check(name: str, good: bool, detail: str = "") -> None:
+        nonlocal ok
+        ok &= good
+        _print(f"[{'OK ' if good else 'XX '}] {name}{': ' + detail if detail else ''}")
+
+    _print(f"settings file: {settings_path()}")
+    from techrag.tls import ca_files
+
+    _print(f"tls: windows/system store={'on' if cfg.tls.system_store else 'off'}, "
+           f"extra CA files={len(ca_files(cfg.tls.ca_bundle))}, system proxy={'on' if cfg.tls.use_system_proxy else 'off'}")
+    check("library", cfg.library_dir.exists(), f"{cfg.library_dir.resolve()} (read_only={cfg.read_only})")
+    if cfg.db_path.exists():
+        from techrag.store import Store
+
+        st = Store(cfg.db_path, read_only=True).stats()
+        check("index", st["chunks"] > 0, f"{st['documents']} docs, {st['chunks']} chunks, "
+                                        f"{st['verified_parameters']}/{st['parameters']} parameters verified, "
+                                        f"embedding={st['embedding_model']}")
+        check("index format", not st["legacy_documents"],
+              f"{st['legacy_documents']} document(s) from an older version: run 'techrag migrate'"
+              if st["legacy_documents"] else "current")
+        if st["embedding_model"] and cfg.embedding.model:
+            check("index matches embedding setting", st["embedding_model"] == f"api:{cfg.embedding.model}",
+                  f"index={st['embedding_model']} setting=api:{cfg.embedding.model}")
+    else:
+        check("index", False, "not built yet (techrag ingest)")
+    for name in ("llm", "vision", "embedding", "reranker"):
+        svc = cfg.vision_service() if name == "vision" else getattr(cfg, name)
+        if name == "reranker" and not cfg.reranker.enabled:
+            _print("[-- ] reranker disabled")
+            continue
+        r = check_service(svc)
+        check(f"{name} endpoint", r["ok"] and bool(svc.model),
+              f"{svc.base_url} model={svc.model or '(not set)'}" + (f" -> {r['error']}" if r.get("error") else ""))
+    return 0 if ok else 1
+
+
+def cmd_serve(cfg: Config, args) -> int:
+    import uvicorn
+
+    from techrag.server import create_app
+
+    import secrets
+
+    host, port = args.host or cfg.server.host, args.port or cfg.server.port
+    if not cfg.server.api_token:
+        # Without a token any web page open in a browser on this machine (or anyone on the network, with a
+        # non-local --host) could call the API: rescan, delete from the index, upload.
+        cfg.server.api_token = secrets.token_urlsafe(18)
+    _print(f"{APP_TITLE} API + UI: http://{host}:{port}/?token={cfg.server.api_token}")
+    uvicorn.run(create_app(cfg), host=host, port=port, log_level="info")
+    return 0
+
+
+def cmd_eval(cfg: Config, args) -> int:
+    from techrag.evaluation import bundled_questions, load_items, run_eval, save_report
+
+    e = _engine(cfg)
+    if args.no_rewrite:
+        e.planner.use_llm = False
+    items = load_items(args.file or bundled_questions())
+    if args.only:
+        items = [i for i in items if any(i.id.startswith(o) for o in args.only)]
+    report = run_eval(e, items, retrieval_only=args.retrieval_only, progress=_print)
+    report.update(set=Path(args.file).name if args.file else "bundled", retrieval_only=args.retrieval_only)
+    _print("\n" + json.dumps(report["summary"], ensure_ascii=False, indent=2))
+    _print(f"report: {save_report(report, args.out or cfg.user_data_dir / 'eval_reports')}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="techrag", description=f"{APP_TITLE}: source-grounded assistant for interface and "
+                                                             "design standards")
+    p.add_argument("-c", "--config", help="YAML config (default: ./config/config.yaml if present)")
+    p.add_argument("--library", help="library folder (overrides settings)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("ingest", help="index the library's sources (incremental; VLM table extraction)")
+    s.add_argument("path", nargs="?", help="file or folder (default: <library>/sources)")
+    s.add_argument("--rebuild", action="store_true")
+    s.add_argument("--no-prune", action="store_true")
+    s.add_argument("--no-vlm", action="store_true", help="skip VLM table extraction")
+    s.add_argument("--no-llm-meta", action="store_true", help="skip LLM metadata extraction")
+    s.set_defaults(func=cmd_ingest)
+
+    s = sub.add_parser("inspect", help="show parsing/chunking of a file (nothing is indexed)")
+    s.add_argument("file")
+    s.add_argument("--start", type=int, default=0)
+    s.add_argument("--limit", type=int, default=10)
+    s.add_argument("--chars", type=int, default=700)
+    s.add_argument("--table-pages", action="store_true", help="list pages that would go to the VLM")
+    s.set_defaults(func=cmd_inspect)
+
+    def scope(sp):
+        sp.add_argument("-d", "--domain", action="append", help="restrict to collection(s)")
+        sp.add_argument("--doc", action="append", type=int, help="restrict to document id(s)")
+
+    s = sub.add_parser("search", help="retrieval only")
+    s.add_argument("query")
+    s.add_argument("-k", type=int)
+    s.add_argument("--chars", type=int, default=400)
+    s.add_argument("--no-rewrite", action="store_true")
+    scope(s)
+    s.set_defaults(func=cmd_search)
+
+    for name, fn, hlp in (("ask", cmd_ask, "answer one question"), ("chat", cmd_chat, "interactive chat")):
+        s = sub.add_parser(name, help=hlp)
+        if name == "ask":
+            s.add_argument("question")
+            s.add_argument("--json", action="store_true")
+        s.add_argument("-v", "--verbose", action="store_true")
+        scope(s)
+        s.set_defaults(func=fn)
+
+    s = sub.add_parser("serve", help="run the API + UI in a browser-less server (headless/dev)")
+    s.add_argument("--host")
+    s.add_argument("--port", type=int)
+    s.set_defaults(func=cmd_serve)
+
+    s = sub.add_parser("add-folder", help="add a document folder (read in place; top-level folders = buckets) "
+                                          "and index it")
+    s.add_argument("folder")
+    s.add_argument("--preview", action="store_true", help="only show buckets and counts")
+    s.add_argument("--rebuild", action="store_true")
+    s.add_argument("--no-vlm", action="store_true")
+    s.add_argument("--no-llm-meta", action="store_true")
+    s.set_defaults(func=cmd_add_folder)
+
+    s = sub.add_parser("rescan", help="re-scan the library and all document folders (new/changed/missing files)")
+    s.add_argument("--rebuild", action="store_true", help="re-process everything (VLM results come from the cache)")
+    s.add_argument("--no-vlm", action="store_true")
+    s.add_argument("--no-llm-meta", action="store_true")
+    s.set_defaults(func=cmd_rescan)
+
+    sub.add_parser("purge-missing", help="remove documents whose source file is gone from the index"
+                   ).set_defaults(func=cmd_purge_missing)
+
+    sub.add_parser("migrate", help="update an index from an older version in place (page geometry for highlights, "
+                                   "cell-level table grounding; no re-embedding, no VLM calls)").set_defaults(func=cmd_migrate)
+
+    s = sub.add_parser("publish", help="write a clean, shareable copy of the library")
+    s.add_argument("dest")
+    s.set_defaults(func=cmd_publish)
+
+    s = sub.add_parser("quality", help="indexing quality report (last run, documents with problems)")
+    s.add_argument("--all", action="store_true", help="also list documents without problems")
+    s.set_defaults(func=cmd_quality)
+    s = sub.add_parser("retry", help="retry failed indexing work (only failed VLM pages where possible)")
+    s.add_argument("path", nargs="*", help="document keys as listed by 'quality' (default: everything)")
+    s.set_defaults(func=cmd_retry)
+    sub.add_parser("stats", help="index statistics").set_defaults(func=cmd_stats)
+    sub.add_parser("docs", help="list documents").set_defaults(func=cmd_docs)
+    sub.add_parser("models", help="list models served by each configured endpoint").set_defaults(func=cmd_models)
+    sub.add_parser("doctor", help="check endpoints, models and index").set_defaults(func=cmd_doctor)
+
+    s = sub.add_parser("cert", help="inspect / trust the HTTPS certificate of a model endpoint")
+    s.add_argument("url", help="e.g. https://vllm.company.local:8000/v1")
+    s.add_argument("--save", help="write the presented chain to this .pem file")
+    s.add_argument("--trust", action="store_true", help="trust it (asks for confirmation)")
+    s.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation")
+    s.set_defaults(func=cmd_cert)
+
+    s = sub.add_parser("eval", help="run a gold question set")
+    s.add_argument("file", nargs="?", help="YAML question set (default: the bundled example set)")
+    s.add_argument("--retrieval-only", action="store_true")
+    s.add_argument("--no-rewrite", action="store_true")
+    s.add_argument("--only", action="append")
+    s.add_argument("--out", help="report folder (default: eval_reports in the user data folder)")
+    s.set_defaults(func=cmd_eval)
+    return p
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
+    cfg = load_config(args.config)
+    if args.library:
+        cfg.paths.library_dir = args.library
+    try:
+        return args.func(cfg, args) or 0
+    except KeyboardInterrupt:
+        return 130
+    except Exception as exc:
+        if os.environ.get("TECHRAG_DEBUG"):
+            raise
+        print(f"ERROR: {exc.__class__.__name__}: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

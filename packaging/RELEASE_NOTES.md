@@ -1,0 +1,711 @@
+## Sayısal Tasarım Uzmanı — Windows masaüstü uygulaması
+
+### 0.15.3 — "Yapay Zeka Asistanları" menüsüyle aynı renkler ve simge
+(0.15.2 yayınlanmadı; değişiklikleri bu sürümdedir.)
+- **İki tema, ikisi de müdürlüğün "Yapay Zeka Asistanları" menüsünün renklerinde:** Ayarlar › Genel › **Tema: Koyu |
+  Açık**. Ayrı "Sarı-Siyah" seçeneği kalktı; onun yerini Koyu aldı. Eski mavi vurgulu koyu ve açık temalar yok.
+  - **Koyu** (varsayılan): menünün kendi renk tanımları: paneller #202124 (kömür grisi), seçili ve üzerine gelinen
+    satırlar #303135, yazılar #F2F0EC, soluk yazılar #A9A8A4, düğmeler, atıflar, seçili sekmeler, bağlantılar ve
+    uygulama adı bronz #C6A47D (düğme yazısı kömür grisi), çizgiler #55565A, uyarılar #FFBE5C. Panellerin arası ve
+    yazı kutuları bir ton koyu.
+  - **Açık**: aynı bronzun açık zeminli eşi: zemin #EFEEEB, paneller #FAF9F7, yazılar #202124, soluk yazılar
+    #6B6A66, çizgiler #D6D4CF; düğmeler bronz #C6A47D (yazısı kömür grisi), bağlantılar, atıflar ve seçili sekmeler
+    okunsun diye daha koyu bronz #8A6A43.
+  - 0.15.1'de "Sarı-Siyah"ı seçmiş olanlar uygulama açılınca Koyu temayla devam eder (ayar dosyasındaki eski değer
+    Koyu olarak okunur, hata verilmez). Arama ve cevaplama değişmedi.
+- **Yeni simge:** masaüstündeki simge ve exe'nin simgesi (Dosya Gezgini, görev çubuğu, pencere başlığı, bildirimler)
+  artık menüdeki Sayısal Tasarım Uzmanı simgesi: kömür grisi daire üzerinde bronz devre yolları ve via'lar (eski mavi
+  mikroçip yerine). Resim `techrag/resources/sayisal-tasarim.png` olarak pakette; her boyuta uygulamanın içinde
+  küçültülür (ek kütüphane gerekmez). Simge daire olduğundan dairenin tamamı tıklanır, köşeler saydam kalır.
+- Doğrulanan: testler (varsayılan Koyu, Açık'a geçiş ve kalıcılığı, iki temada zemin, düğme ve vurgu renkleri,
+  yalnızca iki temanın kabul edilmesi, eski "Sarı-Siyah" ayarının Koyu okunması; simgenin 256 px'te dosyadaki resimle
+  birebir aynı olması, saydam köşeler, opak daire, üzerine gelince açılması, .ico'nun Windows'un okuduğu biçimde
+  olması; PNG çözücünün bütün satır filtreleriyle doğru çalışması). Gerçek bir Windows makinesinde denenmedi.
+
+### 0.15.1 — Sarı-Siyah tema
+- **Üçüncü tema: Sarı-Siyah.** Ayarlar › Genel › **Tema: Koyu | Açık | Sarı-Siyah**. Siyah zemin; düğmeler, seçili
+  sekmeler, atıflar, bağlantılar ve üst çubuğun alt çizgisi sarı; sarı düğmelerin yazısı siyah. Diğer iki tema gibi
+  hemen uygulanır, kullanıcının kendi ayarıdır ve pencere açılırken de siyah zeminle gelir. Arama ve cevaplama
+  değişmedi.
+- Doğrulanan: testler (Sarı-Siyah'a geçiş, kalıcılığı, düğme renkleri, bilinmeyen bir tema değerinin koyu açılması,
+  yalnızca üç temanın kabul edilmesi). Gerçek bir Windows makinesinde denenmedi.
+
+### 0.15.0 — koyu tema, kişisel dosyaların indeksleme durumu, "Yeniden indeksle"
+(Bu sürüm, daha önce geri alınan arama ve etiketleme değişikliklerini içermez.)
+- **Koyu tema varsayılan:** uygulama koyu temayla açılır. Ayarlar › Genel › **Tema: Koyu | Açık** ile değiştirilir;
+  seçim hemen uygulanır, kullanıcının kendi ayarıdır (kurum ayarlarına yazılmaz). Sayfa seçili temayla gelir ve
+  masaüstü penceresinin zemini de aynı renktedir: açılırken diğer tema bir an bile görünmez.
+- **Yeniden indeksle:** Kaynaklar › Kişisel başlığının yanında, adı yazılı bir düğme (eski ⟳'nun yerine, aynı iş):
+  kişisel klasördeki ve bağlı klasörlerdeki yeni ve değişmiş dosyaları indeksler, değişmeyenleri atlar.
+- **Kişisel dosyaların indeksleme durumu** (Ayarlar): her belgenin durumu (İndekslendi / Kısmen / Beklemede / Hata /
+  Dosya yok), indekslendiği tarih, içerik özeti (sayfa, parça, tablo, doğrulanan parametre, standart) ve **Ayrıntı**'da
+  sorunlar ile belgenin bölündüğü parçalar (sayfa, bölüm, metnin başı). Panel yalnızca okur; dosyalar açılmaz.
+- **Anlaşılır hata mesajları:** bir soru bellek yetmediği, sunucuya bağlanılamadığı, sertifika doğrulanamadığı, sunucu
+  zamanında cevap vermediği veya yetki reddedildiği için biterse ne olduğu ve ne yapılacağı Türkçe/İngilizce yazar;
+  asıl hata "Teknik ayrıntı"da kalır (ör. "MemoryError: Unable to allocate 809. MiB …" yerine).
+- **Düzeltme — Hızlı model ve yerel kopya:** Hızlı modelle süren bir değerlendirme sırasında ortak kütüphanenin yerel
+  kopyası alınır veya yenilenirse o değerlendirme eski kütüphaneden okumaya devam ediyordu: bellekte iki takım arama
+  verisi kalabiliyor, kopya yenilenince "unable to open database file" hatası çıkabiliyordu. Artık Hızlı görünüm de
+  geçişle birlikte yeni kopyadan okur.
+- **Bellek:** kütüphane güncellendiğinde arama verisi yeniden yüklenirken eskisi önce bırakılır (kısa süreliğine iki
+  takım tutulmaz). Bulunan kaynaklar aynıdır.
+- **Ağ kopmasında yeniden deneme:** embedding ve reranker isteklerinde anlık bir bağlantı kopması (reddedildi,
+  yarıda kesildi) belgeyi "başarısız" saymadan 1 ve 2 sn bekleyerek iki kez yeniden denenir. Sertifika hataları ve
+  zaman aşımları yeniden denenmez; sunucunun "meşgul" (HTTP 429/503) cevabındaki bekleme değişmedi. Sohbet modelinin
+  akışı yeniden denenmez (cevap iki kez üretilmesin).
+- **Derleme sürümleri sabit:** kütüphaneler `packaging/constraints.txt` dosyasındaki, v0.14.2'nin derlendiği
+  sürümlerle kurulur (Linux testleri ve Windows derlemesi).
+- Doğrulanan: testler (tema: varsayılan koyu, Ayarlar'dan açığa geçiş ve kalıcılığı, kurum ayarlarına yazılmaması;
+  "Yeniden indeksle" düğmesinin yeri ve işi; durum panelinde indekslendi / beklemede (yeni, değişmiş) / hata / dosya yok
+  ve parça listesi; bellek hatasının anlaşılır mesajı; Hızlı görünümün kopya geçişini ve yenilenmesini izlemesi; yeniden
+  yüklemede eski verinin önce bırakılması; ağ kopmasında yeniden deneme, sertifika ve zaman aşımında denememe, 429
+  beklemesinin değişmemesi; sabit sürümlerin tüm gereksinimleri kapsaması). Gerçek bir Windows makinesinde ve ağ
+  paylaşımında denenmedi.
+
+### 0.14.2 — yerel kopya ve bellek
+- **Düzeltme:** belleği az bir bilgisayarda, ortak kütüphanenin yerel kopyası alınırken soru sorulunca "Hata:
+  MemoryError: Unable to allocate … MiB" çıkıyordu. Soru, kopyayı en fazla 15 dakika bekleyip ağdaki kütüphaneyle devam
+  ediyor ve onun arama vektörlerini belleğe yüklüyordu; kopya bitince uygulama kopyanın vektörlerini, ağdakileri
+  bırakmadan yüklüyordu: bellekte aynı verinin iki takımı. Artık:
+  - Yeni kopyaya geçilirken önceki kütüphanenin vektörleri önce bırakılır, sonra yenisininki yüklenir; geçiş süren
+    bir sorunun bitmesini bekler. Bellekte hiçbir zaman iki takım bulunmaz.
+  - İlk kopya alınırken sorular **beklemez**, hemen ağdaki kütüphaneden cevaplanır; kopya hazır olunca uygulama
+    kendiliğinden kopyaya geçer.
+  - Ekranın üstünde kopyanın ilerlemesi gösterilir: "Ortak kütüphanenin yerel kopyası alınıyor: %40 (ilk açılış,
+    bir kez)"; bitince kaybolur.
+- **Arama vektörleri yarı bellekle:** vektörler bellekte indekste saklandıkları gibi 16 bit tutulur (51 749 parça ×
+  4096 boyut: ~800 MB yerine ~400 MB); yükleme anındaki ayrı satır listesi kaldırıldı (tepe kullanım ~1,2 GB'tan
+  ~0,45 GB'a). Benzerlik 32 bitle, bloklar hâlinde hesaplanır; çevirme kayıpsız olduğu için bulunan kaynaklar ve
+  sıraları aynıdır. Bedeli: soru başına yaklaşık 0,4–0,5 sn hesaplama (test makinesinde ölçülen; bir sorunun tüm arama
+  sorguları tek geçişte hesaplanır).
+- Açılıştaki vektör yüklemesi bellek yetmezse uygulamanın genel hata şeridini açmaz; ilk soru yeniden dener.
+- Doğrulanan: testler (eski 32 bit hesapla aynı kaynaklar ve sıra; vektör belleğinin yarıya inmesi; geçişte önceki
+  vektörlerin bırakılması ve süren sorunun beklenmesi; kopya alınırken sorunun hemen cevaplanıp sonra kopyaya
+  geçilmesi; ilerleme şeridi). Gerçek bir ağ paylaşımında ve belleği az bir bilgisayarda denenmedi.
+
+### 0.14.1 — top k ayarları Admin › Ayarlar › Gelişmiş'te; denetçi kapatma uyarısı
+- **Top k ayarları:** Admin › Ayarlar › Gelişmiş'te "Modele verilen pasaj sayısı (top k)" (varsayılan 8, 1–30),
+  "Rerank'e giden aday sayısı" (40), "Anahtar kelime araması aday sayısı (BM25 top k)" (50) ve "Vektör araması aday
+  sayısı (dense top k)" (50). Pasajlar bağlam bütçesine (bağlam uzunluğunun %60'ı) sığdığı kadar verilir. Rerank aday
+  sayısı top k'den küçük girilirse kaydedilmez ve nedeni Türkçe yazılır. Değerler kurum ayarlarına da yazılır.
+- **Bağımsız denetçi açık/kapalı** (Admin › Ayarlar › Cevaplama): kapatılınca altında ne anlama geldiği yazar:
+  ifadeler yalnızca sayı/birim ve atıf kontrolünden geçer, anlamsal olarak denetlenmez; cevaplar daha hızlı gelir ama
+  kaynakla desteklenmeyen bir ifade yakalanmayabilir. Cevabın doğrulama kutusu da "bağımsız denetçi kapalı" der.
+  Denetçi kapalıyken Gelişmiş'teki "bir istekte en fazla ifade" alanı devre dışıdır.
+- Doğrulanan: testler (aralık ve rerank ≥ top k denetimi; top k'nin modele verilen pasaj sayısını sınırlaması;
+  ayarların kaydı; denetçi uyarısının görünmesi).
+
+### 0.14.0 — iki sohbet modeli: Kapsamlı ve Hızlı
+- **Ayarlar**'da iki sohbet modeli seçilir: **Sohbet modeli — Kapsamlı** (önceki sohbet modeli) ve **Sohbet modeli —
+  Hızlı**. Her birinin kendi API adresi ve modeli vardır; hızlı modelin adresi boşsa kapsamlı modelin sunucusu
+  kullanılır.
+- **Düşünme ayarları Admin › Ayarlar'da yan yana:** "Kapsamlı model: düşünme modu / düşünme kontrolü" ve "Hızlı model:
+  düşünme modu / düşünme kontrolü". **Düşünme modu iki model için de varsayılan olarak `on`** (önceden kapsamlı
+  modelde `auto`). Hızlı modelin düşünme kontrolü varsayılan olarak kapsamlı modelle aynıdır. Kendi ayarlarında
+  veya kurum dosyasında düşünme modu kayıtlı olan kullanıcılarda o değer geçerli kalır; herkeste `on` olması için
+  Admin › Ayarlar'da `on` seçip kaydedin ve **Kurum ayarlarını kaydet**'e basın.
+- **Sohbette seçim:** hızlı model ayarlıysa soru kutusunun solunda **Kapsamlı | Hızlı** seçimi çıkar; seçim bu
+  bilgisayarda hatırlanır. Hızlı seçilince sohbet modelinin kullanıldığı her yerde o soru için hızlı model kullanılır:
+  soru çözümleme, cevap, bağımsız denetçi ve atıf düzeltme. Arama, rerank, sayı/birim kontrolü ve doğrulama
+  kuralları değişmez; görsel model (VLM) de aynı kalır.
+- Cevabın süre düğmesi hızlı modelle cevaplanan sorularda "· Hızlı" der, ayrıntıda model adı yazar; kullanım günlüğü
+  cevaplayan modeli kaydeder.
+- **Admin › Değerlendirme**'de soru seti hangi modelle çalıştırılacağı seçilebilir; rapor ve rapor geçmişi modeli
+  gösterir (iki modelin doğruluğunu karşılaştırmak için).
+- Hızlı model kurum ayarlarına da yazılır.
+- Not: hızlı modelde denetçi de hızlı modeldir; doğrulama kuralları aynı kalır, ama desteklenmeyen ifadeleri yakalama
+  gücü o modele bağlıdır. Hızlı modeli kullanmadan önce Admin › Değerlendirme ile iki modeli karşılaştırmanız önerilir.
+- Doğrulanan: testler (hızlı soruda soru çözümleme, cevap ve denetçi isteklerinin hepsinin hızlı modele gitmesi; şekil
+  sayfasının görsel modele gitmesi; kapsamlı modelin değişmemesi; hızlı modelin kendi düşünme ayarı; sohbet
+  seçiminin görünmesi, hatırlanması ve cevapta yazması; kullanım günlüğü; değerlendirme; ayarların kaydı ve kurum
+  dosyası; iki düşünme ayarının Admin'de varsayılan `on` olması). Gerçek iki modelli bir vLLM kurulumunda denenmedi.
+
+### 0.13.2 — kurum ayarlarında en yeni karar geçerli; yayımlanan kütüphanede kalite raporu
+- **Kurum ayarları, en yeni karar geçerli:** önceden bir kullanıcının kendi değeri (ör. ortak kütüphane klasörü) kurum
+  ayarını her zaman eziyordu; kurum dosyasında o ayarı değiştirseniz bile o kullanıcıda eski değer kalıyordu. Artık
+  kullanıcının değeri, seçtiği anda kurum dosyasında o ayarın değeri neyse onunla birlikte kaydedilir. Kurum
+  dosyasında o ayarı sonradan değiştirirseniz yeni değeriniz o kullanıcıda da bir sonraki açılışta geçerli olur;
+  kullanıcı isterse yeniden değiştirebilir. Değiştirmediğiniz ayarlarda kullanıcıların kendi seçimleri kalır.
+  Hiçbir ayar kilitlenmez.
+- **Eski kurulumlar:** önceki sürümlerin kaydettiği kişisel değerler için yeni sürümün ilk açılışında dosya tarihlerine
+  bakılır. Kullanıcının ayar dosyası kurum dosyasının son kaydından önce yazıldıysa kurum değeri geçer (ör. siz
+  kütüphaneyi taşıdıktan sonra hâlâ eski yeri açan iş arkadaşınız). Sonra yazıldıysa kullanıcının değeri kalır (ör.
+  sizin bilgisayarınız: "Kurum ayarlarını kaydet" ayar dosyanızı hemen ardından yazar; kurum ayarlarını kaydettikten
+  sonra değiştirdiğiniz ayarlar sizde kalır). Bu yalnızca kurum dosyasının belirlediği ve değeri farklı olan ayarlar
+  için geçerlidir. API anahtarı, kişisel klasör, dil ve kullanıcının ortak kütüphaneyi salt-okunur açıp açmadığı her
+  zaman kullanıcıda kalır. Yerine kurum değeri geçen değerler silinmez, kullanıcının ayar dosyasında ayrı saklanır.
+  **Admin › Ayarlar**'daki kurum ayarları satırı hangi ayarların değiştiğini söyler.
+- Aynı klasörün farklı yazılışı (ör. sonda ayraç, Windows'ta büyük/küçük harf) artık kullanıcının "kendi değeri"
+  sayılmaz.
+- Hatırlatma: yeni kurum ayarları uygulama yeniden başlayınca okunur. Sohbet penceresini ✕ ile kapatmak veya exe'ye
+  yeniden çift tıklamak uygulamayı yeniden başlatmaz; tam çıkış: simgeye sağ tık → **Uygulamadan çık**.
+- Doğrulanan: testler (kullanıcının sonradan seçtiği klasörün korunması; yöneticinin klasörü taşıyınca yeni klasörün
+  geçmesi; başka bir ayar değişince kullanıcının klasörünün kalması; eski sürümün kaydettiği değerlerin yerine kurum
+  değerinin geçmesi, anahtar ve salt-okunur seçiminin kalması; kurum kaydından sonra değiştirilmiş eski değerlerin
+  kalması; yöneticinin kendi açış biçiminin korunması; kurum
+  dosyasına ulaşılamayınca hiçbir şeyin değişmemesi; Admin'deki bilgi satırı). Gerçek iki bilgisayarlı kurulumda
+  denenmedi.
+
+**Yayımlanan kütüphanede kalite raporu**
+- **Düzeltme:** **Admin › Ortak kütüphane → Yayımla** ile üretilen pakette, belge klasörlerinden eklenmiş belgelerin
+  kalite kayıtları eski klasör anahtarında kalıyordu (belgeler paket içindeki yeni yollarını alırken). Bu yüzden
+  yayımlanan kütüphanenin **İndeksleme kalite raporu** bu belgelerin hepsi için "kalite bilgisi yok" diyordu. Artık
+  kayıtlar belgelerle birlikte taşınır.
+- **Önceden yayımlanmış paketler:** paket Admin'de yazılabilir açılınca kayıtlar belgelerine kendiliğinden yeniden
+  bağlanır. Yalnızca eşleşmenin kesin olduğu yerde bağlanır (kaydın klasörü pakette yok, aynı göreli yolda tek kayıt
+  ve kaydı olmayan tek belge, aynı başlık ve sayfa sayısı). Hiçbir kayıt silinmez; eşleşmeyen kayıt olduğu gibi
+  kalır. Yeniden indeksleme veya model çağrısı gerekmez.
+- Pakete girmeyen (işlenememiş) klasör dosyalarının hata kayıtları artık yeni pakete alınmaz; bu dosyalar
+  kütüphanenin kendi raporunda görünmeye devam eder.
+- Not: 0.6.0'dan önce indekslenmiş belgelerin kalite kaydı hiç yoktur. "Tümünü yeniden tara" değişmemiş belgeleri
+  yeniden işlemediği için bu kaydı oluşturmaz; kayıt **Tamamen yeniden oluştur** ile oluşur.
+- Doğrulanan: testler (yayımlanan pakette her belgenin kaydının olması; eski bir paketin yazılabilir açılınca
+  kayıtlarını geri alması, kesin olmayan eşleşmenin bağlanmaması, hiçbir kaydın silinmemesi). Kullanıcının gerçek
+  paketinde denenmedi.
+
+### 0.13.1 — yeni bilgisayarda ilk soru "aranıyor"da takılmıyor
+- **Düzeltme:** yeni bir bilgisayarda, ortak kütüphanenin yerel kopyası henüz alınmamışken uygulama açılışta vektörleri
+  ve arama dizinini ağdan sayfa sayfa okumaya başlıyordu; ilk soru "Soru çözümleniyor ve kaynaklar aranıyor…"
+  aşamasında dakikalarca bekliyordu (aynı anda yerel kopya da çekildiği için dosya ağdan iki kez okunuyordu). Artık
+  ilk kopya alınırken ağdan okuma yapılmaz; soru kopyanın bitmesini bekler (tek parça okuma, çok daha kısa) ve
+  sohbette "Ortak kütüphanenin yerel kopyası alınıyor (ilk açılış, bir kez): %…" görünür, sonra kopyadan cevaplanır.
+  Kopya alınamazsa (veya 15 dakikayı aşarsa) ağdaki kütüphaneyle devam edilir.
+- **Günlükte aşama süreleri:** `techrag.log` her soruda soru çözümleme, arama (anahtar kelime, vektör yükleme,
+  embedding, rerank) sürelerini ve yerel kopyanın ne kadar sürede alındığını yazar; bir soru takılırsa nerede beklediği
+  görülür. Cevabın altındaki "Süre" dökümünde "Arama" satırı vektör yüklemeyi de içerir.
+- Doğrulanan: test (ilk kopya alınırken sorulan sorunun kopyayı beklemesi, bunu bildirmesi ve kopyadan cevaplanması).
+  Gerçek bir Windows ağ paylaşımında denenmedi.
+
+### 0.13.0 — ağdaki ortak kütüphanenin yerel kopyası (hızlı arama)
+- **Arama ağda dakikalar sürüyordu:** ağ klasöründeki indeks sayfa sayfa (4 KB) ağ üzerinden okunuyordu; her yeni soru
+  anahtar kelime dizininin başka bölümlerini okuduğu için aynı soru tekrarında hızlı, yeni soruda dakikalar sürüyordu.
+- **Yerel kopya:** ortak kütüphane salt-okunur ve bir ağ klasöründen açıldığında indeksin (`index.sqlite`) bir kopyası
+  bu bilgisayara alınır ve arama oradan yapılır; PDF'ler ağda kalır. Kopya büyük bloklarla tek seferde alınır, kopyalanırken
+  ağdaki dosya değişmişse atılıp yeniden alınır ve bütünlük denetiminden geçmeden kullanılmaz.
+- **Kendiliğinden güncellenir:** ağdaki indeks uygulama açılırken denetlenir (Admin'deki **Şimdi denetle** ile de);
+  kütüphaneyi ağda güncellediyseniz yeni kopya arka planda alınır ve uygulama ona geçer (o sırada önceki kopya cevap
+  verir). Uygulama açıkken düzenli denetim yapılmaz. Ağ yokken kopya çalışmaya devam eder.
+- **Admin › Ortak kütüphane:** kopyanın durumu, boyutu, son eşitleme zamanı, **Şimdi denetle** ve kopyayı kapatma.
+  Kütüphaneye yazan kişi (yazılabilir açış) ağdaki dosyayı kullanmaya devam eder.
+- Bedeli: her kullanıcının diskinde indeks büyüklüğünde yer; güncellemeler kullanıcı uygulamayı yeniden açtığında
+  (veya **Şimdi denetle**'ye bastığında) görünür.
+- Doğrulanan: testler (kopyanın alınıp aramanın ondan yapılması, ağdaki değişikliğin fark edilip yeni kopyaya
+  geçilmesi ve eskisinin silinmesi, kopyalama sırasında değişen ve bütünlük denetiminden geçmeyen kopyanın
+  kullanılmaması, ağ yokken kopyayla çalışma, yazılabilir kütüphanenin hiç kopyalanmaması). Gerçek bir Windows ağ
+  paylaşımında hızın ne kadar arttığı ölçülmedi.
+
+### 0.12.1 — içindekiler tek düğmeyle, kütüphane klasörü değişikliği kaybolmuyor
+- **İçindekiler tek düğmeyle açılıp kapanır:** açıkken başlığındaki **‹** kapatır, kapalıyken sayfanın sol üstünde
+  **☰ İçindekiler** düğmesi görünür; **Ctrl+B** de açar/kapatır (alttaki şeritteki ☰ de duruyor).
+- **Kütüphane klasörü değişikliği kaybolmuyor:** Admin › Ortak kütüphane'de klasör alana yazılıp veya "…" ile seçilip
+  "Aç"a basılmadan pencere kapatılırsa değişiklik uygulanmıyor ve sessizce kayboluyordu. Artık uygulanmamış değişiklik
+  alanın altında belirtiliyor ve Admin kapatılırken "Şimdi açılsın mı?" diye soruluyor. "Salt-okunur aç" işaretliyken
+  indekssiz bir klasör açılamamasının nedeni de Türkçe yazılıyor.
+- **Düzeltme (0.12.0):** "Diğer kullanıcılar ortak kütüphaneyi salt-okunur açsın" seçiliyken kurum ayarlarını
+  kaydeden kişinin kendi kütüphanesi de bir sonraki açılışta salt-okunur açılıyordu. Kaydedenin kendi açma biçimi artık
+  kendi ayarı olarak korunuyor.
+- Doğrulanan: arayüz testleri (içindekilerin başlıktaki düğme, sayfa üstündeki düğme ve Ctrl+B ile açılıp kapanması;
+  uygulanmamış klasörün belirtilmesi, kapatırken sorulması ve açılınca kaydedilmesi; salt-okunur indekssiz klasör
+  mesajı) ve kurum ayarlarını kaydedenin kütüphanesinin yeniden açılışta salt-okunur olmaması.
+
+### 0.12.0 — kurum ayarları ortak klasörde, içindekiler PDF'in solunda
+- **Kurum ayarları:** Admin › Ayarlar › **Kurum ayarları** › "Kurum ayarlarını kaydet" ile kayıtlı ayarlarınız (model
+  sunucuları ve modeller, cevaplama ve gelişmiş ayarlar, bağlantı güvenliği, ortak kütüphane klasörü, kullanım günlüğü
+  klasörü) seçtiğiniz ağ klasörüne `kurum-ayarlari.yaml` olarak yazılır; **API anahtarı ve kişisel klasörler
+  yazılmaz**. Exe'nin yanına bu klasörü gösteren `SayisalTasarimUzmani.kurum.txt` bırakılır; exe'yi bu dosyayla
+  verdiğiniz kullanıcılar ayarları oradan alır ve yalnızca API anahtarlarını girer (Ayarlar penceresi kendiliğinden
+  açılır). İsteğe bağlı olarak diğer kullanıcılar ortak kütüphaneyi salt-okunur açar (varsayılan işaretli).
+  - Kurum ayarları varsayılandır, kilit yoktur; kullanıcının kendi dosyasına yalnızca farklı olan değerler yazılır,
+    böylece kurum dosyasındaki sonraki değişiklikler herkese bir sonraki açılışta ulaşır.
+  - Bulunma sırası: `TECHRAG_ORG_SETTINGS` ortam değişkeni → exe'nin yanındaki dosya → ilk açılışta verilen klasör.
+    Hiçbiri yoksa ve uygulama ayarlanmamışsa ilk açılışta bir kez "Kurum ayarları nerede?" sorulur.
+  - Ağ klasörüne ulaşılamazsa son okunan kopya kullanılır ve bu belirtilir. Elle düzenlenmiş bir dosya anahtar veya
+    kişisel klasör koyamaz.
+- **İçindekiler PDF'in solunda:** kaynak panelinde içindekiler artık sayfanın altında değil, PDF'in solunda
+  açılır-kapanır bir şerit (☰). Genişliği aradaki çizgi sürüklenerek (veya ←/→) ayarlanır; açık/kapalı durumu ve
+  genişlik korunur. Başlığa tıklamak sayfayı aynı görüntüleyicide çevirir. Sol listeden açılan belgede açık, cevaptaki
+  atıftan açılan kaynakta kapalı başlar.
+- Doğrulanan: birim/API/arayüz testleri (kaydedilen dosyada anahtar ve kişisel yol olmaması, işaretçi dosyası, yeni
+  kullanıcıda varsayılan olarak gelmesi, kullanıcının kendi değişikliğinin korunması ve kurum değişikliğinin ulaşması,
+  ulaşılamayınca son kopya, elle eklenmiş anahtarın atılması, ilk açılış sorusu ve anahtar istemi; içindekiler
+  şeridinin konumu, sayfaya gitmesi, sürükleme, kalıcılığı). Gerçek bir Windows ağ paylaşımında ve GPO ile
+  denenmedi.
+
+### 0.11.0 — denetçi kesilmeleri, kişisel klasör bucket'ı, ortak belge kaldırma, daraltılabilir kaynaklar
+- **Denetçi "cut off" hataları:** doğrulama gevşetilmedi; kesik bir yanıt yine onay sayılmaz.
+  - Düşünme kontrolü `reasoning_effort` iken (ör. vLLM'de Gemma 4) düşünmemesi gereken çağrılar — denetçi, soru
+    çözümleme, düzeltme — artık düşünmeyi açıkça kapatıyor (`enable_thinking: false`). Önceden hiçbir şey
+    gönderilmiyordu; sunucunun varsayılanı "düşün" ise denetçi düşünüp token sınırını dolduruyordu. Sunucu bu
+    alanı reddederse bir kez günlüğe yazılır ve gönderilmez.
+  - Token sınırında kesilen bir kararın tekrarında yanıta daha geniş yer (2048 token) ayrılır; önceden aynı sınırla
+    tekrar sorulup yine kesiliyordu.
+  - Doğrulama kutusu yalnızca sonuçsuz kalan denetçi hatalarını gösterir ve bunları Türkçe yazar ("Denetçi 460 token
+    sınırının 430 token'ını düşünmeye harcadı ve cevabı kesildi: model sunucusu düşünmeyi kapatmadı …"). Tekrar
+    denemede tamamlananlar "n ifade için denetçi tekrar denendi ve tamamlandı" olarak not edilir; önceden ilk
+    denemenin hatası, ifadeler doğrulanmış olsa da listede kalıyordu.
+- **Kişisel › Klasör ekle…:** bir klasör seçin; klasör tek bir kişisel bucket olur (🔗, adı klasörün adı) ve içindeki
+  bütün belgeler alt klasörler dahil yerinde indekslenir — kopyalanmaz, klasöre bir şey yazılmaz. ⟳ yeni/değişen
+  dosyaları işler. ✕ klasörü kişisel kaynaklardan çıkarır (dosyalara dokunulmaz); böyle bir klasördeki bir belgenin
+  🗑'ü onu yalnızca indeksten çıkarır, dosya yerinde kalır ve sonraki taramalarda atlanır. "Dosya seç…" aynen duruyor.
+- **Admin › Ortak kütüphane › Belgeler:** ortak kütüphanedeki belgeler aranıp 🗑 ile kaldırılabilir. Belge yalnızca
+  indeksten çıkar; **dosyası silinmez**, yerinde kalır ve sonraki taramalar onu atlar. Kaldırma herkes için geçerlidir;
+  **Kaldırılan belgeler**'den "Geri al" ile belge klasörü yeniden taranarak tekrar indekslenir. Salt-okunur
+  kütüphanede ve indeksleme sürerken kaldırma yapılamaz.
+- **Daraltılabilir kaynaklar:** sol paneldeki **Ortak** ve **Kişisel** başlıklarına tıklayınca liste daralır, diğeri
+  boşalan yeri alır; durum korunur.
+- **Başlangıç ekranı:** sohbetin ilk ekranındaki örnek sorular kaldırıldı; yalnızca başlık ve kısa açıklama kalır.
+- **Uygulama simgesi mikroçip:** exe'nin simgesi artık başlatıcıdaki mikroçip (Dosya Gezgini, görev çubuğu, pencere
+  başlığı ve Windows bildirimleri); önceden PyInstaller'ın varsayılan simgesi görünüyordu. Simge derleme sırasında
+  aynı çizimden 16-256 piksel boyutlarında üretilir. Masaüstü kısayolu daha önce oluşturulduysa Windows'un simge
+  önbelleği yeni simgeyi biraz gecikmeli gösterebilir.
+- **Yükseltme:** kütüphane açılışta yerinde güncellenir — kaldırılan belgeler için bir tablo ve belge klasörlerine bir
+  tür sütunu eklenir; belgeler, embedding'ler ve ayarlar değişmez. Eski sürümün yazdığı bir kütüphane salt-okunur da
+  açılır. Yeniden indeksleme gerekmez.
+- Doğrulanan: birim/arayüz testleri (düşünmenin açıkça kapatılması ve sunucu reddederse bırakılması, kesilen kararın
+  daha geniş yerle tekrarı, düşünmeden kesilmenin Türkçe açıklaması, yalnızca sonuçsuz hataların listelenmesi;
+  ortak belgenin dosyasına dokunmadan kaldırılması, taramalarda atlanması ve geri alınması; klasörün tek bucket olarak
+  yerinde indekslenmesi, aynı adlı iki klasörün ayrı kalması, kişisel klasörle çakışan klasörün reddi; daraltmanın
+  korunması). Gerçek model sunucusunda (Gemma 4 / vLLM) denenmedi.
+
+### 0.10.1 — Türkçe cevaplarda PDF vurgusu, kaynaklar cevapla birlikte
+- **Vurgu daha sık çıkıyor:** atıf ve doğrulama yerindeyken PDF'te vurgu çıkmamasının en sık nedenleri giderildi
+  (yalnızca vurgu adımı değişti; doğrulama gevşetilmedi):
+  - Sayı içermeyen Türkçe ifadeler İngilizce kaynakta artık ortak **teknik terimleriyle** (RTT, MR1, ODT, tRFC)
+    bulunuyor; önceden kelime örtüşmesi aranıyordu ve Türkçe cümlede bu neredeyse hiç tutmuyordu. Türkçe harfler
+    (ı, ş, ç, ğ, ö, ü) kelimeleri artık bölmüyor. Belgenin kendi standardının adı (ör. DDR3) her cümlede geçtiği
+    için ayırt edici sayılmıyor.
+  - Başka birimle yazılmış değer (1250 ps ↔ 1.25 ns, 1200 mV ↔ 1.2 V) doğrulamadaki çevrimle eşleşiyor; sayfada
+    kaynağın yazdığı değer işaretleniyor.
+  - Tablo **başlık satırındaki** değerler (hız sınıfları: DDR3-800, DDR3-1600 …) başlık hücresinde işaretleniyor.
+  - Sayının birden fazla satırda geçtiği tablolarda ifadenin andığı terim doğru satırı seçmeye yardım ediyor.
+  - Belirsizlik kuralı aynı: iki farklı cümle ifadeyi eşit taşıyorsa ya da metin sayfada birden fazla yerde
+    geçiyorsa vurgu çizilmez (yanlış yere vurgu yapılmaz).
+- **Vurgu çıkmadığında nedeni:** sayfanın altındaki yarı saydam şeritte kısaca yazar (⚠ "Konum eşleştirilemedi",
+  "Konum belirsiz", "Metin katmanı yok", "Eski indeks: konum yok"; üzerine gelince açıklaması).
+- **Kaynaklar cevapla birlikte:** cevap yazılırken bulunan kaynaklar artık tek tek listelenmiyor; kaynak listesi
+  (atıf düğmeleri) son cevapla birlikte gelir. Bulunan kaynaklar Admin › Düşünme ve aramalar'da görünmeye devam eder.
+- **Cevabın başına kaydırma:** cevap gelince sohbet sonuna değil cevabın başladığı yere kaydırılır; kayıtlı bir
+  sohbet açıldığında da son cevabın başı gösterilir.
+- Yeniden indeksleme gerekmez; vurgular yeni sorulan sorularda hesaplanır (kayıtlı sohbetlerdeki eski cevapların
+  vurguları kaydedildiği gibi kalır).
+- Doğrulanan: sentetik PDF'lerle testler (Türkçe ifadenin doğru cümlede vurgulanması, eşit iki cümlede vurgu
+  yapılmaması, 1250 ps'nin 1.25 ns hücresinde, hız sınıflarının başlık hücresinde işaretlenmesi, aynı sayının
+  ifadenin andığı satırda işaretlenmesi) ve arayüz testleri (kaynakların cevaptan önce görünmemesi, cevabın başına
+  kaydırma, şeritteki neden). Gerçek standart PDF'lerinde ve gerçek model cevaplarında vurgu oranının ne kadar
+  arttığı ölçülmedi.
+
+### 0.10.0 — sohbet geçmişi, Admin ayarları, sade kaynak paneli, kişisel belge kaldırma
+- **Sohbet geçmişi:** sol panelde **Kaynaklar | Sohbetler** sekmeleri. Sohbetler yeniden eskiye listelenir; birine
+  tıklayınca cevaplar, atıflar, doğrulama kutusu ve PDF vurgularıyla açılır ve devam edilebilir. Her soru
+  sonuçlandığında kaydedilir. Sohbetler yalnızca bu bilgisayarda, kullanıcının kendi ayarlar klasöründe
+  (`%APPDATA%\SayisalTasarimUzmani\chats`) tutulur; ortak kütüphaneye ve kullanım günlüğüne yazılmaz. Tek tek veya
+  hepsi birden silinebilir.
+- **Admin › Ayarlar:** görsel model, embedding ve reranker sunucuları, cevaplama, gelişmiş ayarlar ve bağlantı
+  güvenliği Admin'deki yeni **Ayarlar** sekmesine taşındı (kendi "Kaydet" düğmesiyle). Ayarlar penceresinde yalnızca
+  ortak API anahtarı, sohbet modeli ve bildirim kaldı.
+- **Kaynak paneli:** üstte yalnızca **[n] ve doküman başlığı** kalır (bölüm, sayfa, revizyon başlığın ipucunda);
+  "Doğrulama" ve "Konum" satırları kaldırıldı, sayfa görüntüsü panelin tamamını kullanır. Sayfa değiştirme,
+  yakınlaştırma, vurgu aç/kapa, kanıtlar arası gezinme ve "Orijinali aç" sayfanın altında yarı saydam bir şeritte.
+- **Ortak / Kişisel bölme:** iki liste arasındaki çizgi sürüklenerek (veya ↑/↓) ayarlanır; varsayılan ortası, ayar
+  korunur.
+- **Kişisel belge kaldırma:** kişisel belgenin yanındaki 🗑 onu kişisel indeksten kaldırır; kişisel klasördeki kopyası
+  Geri Dönüşüm Kutusu'na gider (ağ sürücüsünde veya Geri Dönüşüm Kutusu yoksa `_indeks\silinenler` klasörüne).
+  Bilgisayarınızda seçtiğiniz asıl dosyaya ve kişisel klasörün dışındaki dosyalara dokunulmaz; hiçbir dosya
+  sorulmadan kalıcı silinmez.
+- Yeniden indeksleme gerekmez; ayarlar, anahtarlar ve kütüphaneler aynen kullanılır.
+- Doğrulanan: birim/arayüz testleri (sohbetin kaydedilip yeniden açılınca atıf ve PDF vurgusunun çalışması,
+  sohbet silme, geçersiz sohbet kimliklerinin reddi, ayarların iki pencereye bölünmesi, kontrol şeridinin sayfanın
+  üzerinde ve yarı saydam olması, bölmenin sürükleme/klavye/kalıcılığı, kişisel kaldırmada asıl dosyaya ve klasör
+  dışına dokunulmaması). Windows'ta Geri Dönüşüm Kutusu çağrısı CI'da sınanır; gerçek model sunucusunda denenmedi.
+
+### 0.9.0 — tek API anahtarı, Admin, kişisel dosyalar ve kullanım günlüğü
+- **Tek API anahtarı:** sohbet (vLLM), görsel model, embedding ve reranker sunucularının hepsi Ayarlar'ın üstündeki
+  tek ortak anahtarı kullanır; servis başına anahtar alanları kaldırıldı. Eski sürümde servis başına girilmiş
+  anahtarlar ilk kayıtta ortak anahtara taşınır (sohbet modelininki esas alınır; şifreli hâliyle, yeniden girmeniz
+  gerekmez). Kayıtlı anahtar yalnızca ayarlı model sunucularına gönderilir, başka bir adrese gönderilmez.
+- **Admin sekmesi** (üst çubuk, herkese açık): *Ortak kütüphane* (ortak dosyaların hangi klasörlerden ve
+  bucket'lardan geldiği, belge klasörü ekleme, yeniden tarama, kalite raporu, kütüphane açma/yayımlama — eski
+  "Kütüphane" penceresi buraya taşındı), *Düşünme ve aramalar*, *Değerlendirme* (eski "Değerlendirme" penceresi)
+  ve *Kullanım günlüğü*.
+- **Düşünme ve aranan belgeler sohbetten kalktı:** modelin düşünmesi, kapsam satırı, araç çağrıları ve modele
+  verilen kaynaklar Admin › Düşünme ve aramalar'da, bu oturumdaki her soru için açılır-kapanır bölümlerde durur.
+  Sohbette cevap, atıflar ve doğrulama kutusu kalır.
+- **Kaynaklar: Ortak ve Kişisel.** Sol panelin *Kişisel* bölümünde "Dosya seç…" ile bilgisayarınızdan dosya
+  seçersiniz; dosya kişisel klasörünüze kopyalanır (varsayılan `%USERPROFILE%\SayisalTasarimUzmani\Kisisel`,
+  "değiştir" ile seçilir) ve o klasördeki ayrı bir kişisel indekste indekslenir. Ortak kütüphane salt-okunur açık
+  olsa da çalışır; ortak kütüphaneye hiçbir şey yazılmaz. Sorular ortak ve kişisel kütüphanede birlikte aranır;
+  kişisel bucket tek başına da seçilebilir.
+- **Kullanım günlüğü:** her soru Windows kullanıcı adı, bilgisayar, soru, sonuç, süre ve token sayılarıyla
+  (istem / üretilen / düşünme / toplam, model çağrısı sayısı) Admin'de seçilen klasörde kullanıcı başına bir CSV
+  dosyasına yazılır (UTF-8, `;` ayraçlı, Excel'de açılır). Cevap metni yazılmaz. Ağ klasörü kullanılabilir; klasöre
+  yazılamazsa kayıt yerel klasöre düşer ve Admin uyarır. Admin'de kullanıcı başına soru/token özeti görünür.
+- Yeniden indeksleme gerekmez; ortak kütüphane, ayarlar ve anahtarlar aynen kullanılır.
+- Doğrulanan: birim/arayüz testleri (anahtar taşıma ve yalnız ayarlı sunuculara gönderilmesi, kişisel indeksin
+  ortak kütüphaneyle birlikte aranması ve salt-okunur ortak kütüphanede çalışması, kimliklerin karışmaması,
+  günlük satırları ve yerel yedek, Admin sekmeleri, sohbette düşünme/arama gösterilmemesi). Gerçek model
+  sunucusunda ve Windows ağ klasöründe denenmedi.
+
+### 0.8.1 — düzeltmede yalnızca hatalı cümleler yeniden yazılır
+- Doğrulamada desteklenmeyen bir ifade bulununca model artık cevabın **tamamını** yeniden yazmıyor; yalnızca o
+  cümleleri düzeltiyor ya da kaldırıyor. Diğer cümlelere dokunulmuyor. Düzeltme isteği kısa bir JSON cevap
+  bekliyor (hatalı ifade başına en fazla ~250 token) ve cevabın kendi konuşmasının devamı olarak gönderiliyor:
+  aynı kaynaklar, aynı istem başlangıcı (model sunucusunda önek önbelleği açıksa yeniden kullanılır).
+  Örnek ölçümde tam yeniden yazma 2.132 token / 3 dakika sürüyordu; birkaç hatalı cümle için artık birkaç yüz
+  token beklenir. Gerçek sunucuda ölçülmedi; "Süre" dökümündeki "düzeltme" satırında görünür.
+- Doğrulama gevşetilmedi: düzeltilen cümleler ilk taslak gibi yeniden doğrulanır, denetçiye yalnızca değişen
+  cümleler gider (önceden onaylanan cümlelerin kararı korunur). Kullanılamayan bir düzeltme (bozuk JSON, tablo
+  satırı yerine düz cümle) yok sayılır; hatalı ifade önceki gibi çıkarılır veya işaretlenir.
+- Ayardaki adı: "Doğrulanamayan ifadeleri bir kez düzelttir (yalnızca o cümleler yeniden yazılır)".
+- Yeniden indeksleme gerekmez.
+
+### 0.8.0 — durdur, bildirim, süre dökümü ve hızlandırmalar
+- **Durdur:** model düşünürken veya cevap yazarken gönder düğmesinin yerinde kırmızı **Durdur** düğmesi ve geçen
+  süre görünür. Durdur yalnızca ekranı değil, modele giden isteği de keser; sunucu o cevap için token üretmeyi
+  bırakır, kuyruktaki diğer işler beklemez. Yarım kalan taslak doğrulanmadığı için cevap olarak gösterilmez.
+  "Yeni sohbet" de süren cevabı aynı şekilde durdurur. Pencereyi kapatmak (gizlemek) cevabı durdurmaz; cevap
+  arka planda tamamlanır ve bildirim gelir.
+- **Cevap hazır bildirimi:** pencere küçültülmüş, çip simgesinin arkasına gizlenmiş veya başka programların
+  arkasındayken cevap ya da netleştirme sorusu hazır olunca Windows bildirimi çıkar (başlık: "Cevap hazır",
+  "Cevap hazır: kaynaklarda bulunamadı", "Netleştirme sorusu var" veya hata; metin: sorulan soru). Bildirime
+  tıklamak sohbeti açar. Küçültülmüş pencerenin görev çubuğu düğmesi de yanıp söner. Pencere öndeyken bildirim
+  çıkmaz; Windows'un odak yardımı / sessiz saatleri geçerlidir. Ayarlar'dan kapatılabilir.
+- **Süre dökümü:** her cevabın altındaki "Süre: …" düğmesi sürenin nereye gittiğini gösterir: soru çözümleme,
+  arama, şekil sayfaları, cevap yazma (model çağrısı sayısı, düşünme, araç çağrılarının payı), doğrulama,
+  düzeltme, kanıt konumu; her aşamanın model çağrıları için üretilen token (düşünme kısmı ayrı), token/sn ve ilk
+  token'a kadar bekleme. Sunucu token sayısını bildirmiyorsa metin uzunluğundan tahmin edilir (≈). Döküm günlüğe
+  de yazılır. 15 dakika süren bir cevabın hangi aşamada beklediğini buradan görüp ona göre ayar yapabilirsiniz.
+- **Hızlandırmalar (doğrulama gevşetilmedi):**
+  - Hatalı ifadeleri düzeltme turu artık düşünmeden çalışır (sorunlar zaten tek tek listeleniyor; düzeltilen
+    cevap ilk taslak gibi yeniden doğrulanır). Düşünme açıkken bu adım tek başına dakikalar sürebiliyordu.
+  - Görsel model açıkken şekil sayfası dökümleri sırayla ve sınırsız yapılıyordu (bulunan parçalar arasında
+    şekil sayfası olan her sayfa için ayrı, uzun bir model çağrısı). Artık amaçlandığı gibi en fazla 2 sayfa ve
+    aynı anda; dökümler önbelleğe alındığı için sonraki sorularda tekrar yapılmaz.
+  - Gelişmiş ayarlara **en fazla araç turu** eklendi (varsayılan 4; her tur ayrı bir model çağrısı).
+- Yeniden indeksleme gerekmez. Ayarlar, API anahtarları ve kütüphane aynen kullanılır.
+- Doğrulanan: birim/arayüz testleri (durdurmanın modele giden isteği akış ortasında kapattığı, durdurulan
+  cevabın doğrulanmadığı ve bildirilmediği, süre dökümü, bildirimin yalnızca pencere görünmezken çıktığı),
+  Windows'ta gerçek bildirim ve tıklama testi ve GUI smoke testi. Gerçek model sunucusunda hızın ne kadar arttığı
+  ölçülmedi; bu, sürenin sizde hangi aşamada geçtiğine bağlıdır (döküme bakın).
+
+### 0.7.3 — değerlendirmede soru soru cevaplar, yeni örnek set
+- **Sorular ve cevaplar:** Değerlendirme penceresinde her raporun altında her soru bir satır: sonuç (doğru,
+  yanlış, cevap yok, netleştirme sordu, bulunamadı dedi, hata). Açınca beklenen değer, belge, sayfa ve kontrol
+  notu ile sistemin cevabı, atıf yaptığı kaynaklar, doğrulamanın çıkardığı ifadeler (Türkçe gerekçeleriyle) ve
+  olgu sonuçları yan yana görünür. "Yalnızca sorunlu olanları göster" süzgeci ve soruyu sohbette (kaynaklar, PDF
+  vurgusu, 👍/👎 ile) soran "Sohbette sor" düğmesi var. Önceki raporlar da bu ayrıntılarla açılır (yeni
+  çalıştırmalarda beklenen değerler ve kaynaklar rapora yazılır).
+- **Yeni örnek set (30 soru):** kütüphanedeki konulara göre — ARINC-429, ARINC-818, COM Express, DDR, LPDDR4,
+  DisplayPort, Ethernet, genel tasarım, I2C, PCIe, RS-422, USB. Karışık türler: değer (13), tasarım dilinde soru
+  (12; "length matching gerekir mi", "pull-up nasıl seçilir", "I2C hattı ne kadar uzun olabilir"), koşula bağlı
+  (2; netleştirme sorması doğru), karşılaştırma (2) ve kütüphanede cevabı olmayan (1). Değerler taslaktır;
+  "Dosyayı indir" ile indirip belgenize göre kontrol edin (belge, sayfa, değer), `status: expert_verified` yapın ve
+  kendi dosyanız olarak yükleyin.
+- **Simge artık kaybolmuyor:** sohbet penceresi açılınca (etkin pencere olunca) simge onun arkasına geçiyordu;
+  pencere simgenin köşesini kapladığında (ekranı kapladığında veya dizüstü ölçeğinde büyük açıldığında) simge
+  görünmez oluyordu. Simge artık sohbet penceresinin de üzerinde kalır. Simge gönder düğmesinin üstüne gelirse
+  soru kutusu ve gönder düğmesi simgenin soluna kayar; pencere taşındığında, boyutlandırıldığında veya simge
+  sürüklendiğinde bu kendiliğinden güncellenir.
+- PDF okuyucu kütüphanesi (PyMuPDF) 1.x sürümüne sabitlendi: yeni çıkan 2.0, PDF tablolarını farklı okuyor
+  (kelime arası boşluklar kayboluyor, boş sütunlar ekleniyor, "7.8" değeri "78" ve "." diye bölünüyor). Önceki
+  sürümlerin exe'leri 1.x ile derlenmişti, etkilenmedi.
+- Değerlendirme raporunda netleştirme ayrı ölçülür: koşula bağlı sorularda netleştirme sorma oranı ve diğer
+  sorularda gereksiz netleştirme oranı (pay/payda ile); koşula bağlı soruda netleştirme sormak "gereksiz cevap
+  vermeme" sayılmaz.
+- Yeniden indeksleme gerekmez.
+
+### 0.7.2 — tasarım sorularını standardın gereksinimine bağlama
+Standartlar gereksinimleri kendi terimleriyle yazar; kullanıcı ise çoğu zaman tasarım diliyle sorar. Örneğin
+"length matching gerekir mi?" sorusunun cevabı standartta intra/inter-pair skew sınırı olarak yazar. Önceki
+sürümde arama sorudaki kelimeyle yapıldığı için bu bağ kurulamıyor, model "bulunamadı" diyordu. Bu sürümde bağı
+soru veya standart bazında bir eşleme tablosuyla değil, LLM kurar:
+- **Planlayıcı:** sorulan kavramı standartta hangi gereksinimin (sınır, zamanlama, elektriksel parametre, zorunlu
+  prosedür) belirlediğini düşünür ve onlar için de standardın terimleriyle arama sorgusu üretir. Ayrıca
+  "standart bunu nasıl yazardı" diye, sayıların yerine X konan bir cümle yazar; bu cümle yalnızca anlamsal
+  aramada kullanılır, kanıt olmaz ve gösterilmez. Ek model çağrısı yok.
+- **İkinci şans:** cevap modeli "bulunamadı" derse bir kez, ilgili gereksinimi araçlarla standardın kendi
+  terimleriyle araması istenir (araç çağırma açıksa; yalnızca bu cevaplarda bir model turu daha). Sohbette
+  "Doğrudan bulunamadı — standardın ilgili gereksinimi aranıyor…" görünür. Ayarlar → Gelişmiş'ten kapatılabilir.
+- **Cevap kuralı:** gereksinim atıfla verilir, tasarım sonucu "Mühendislik yorumu" bölümünde açıklanır.
+  Kaynakta olmayan bir değere dayanan sayısal dönüşüm (ör. ps → mm için kartın mm başına gecikmesi) sayı olarak
+  verilmez, neye bağlı olduğu söylenir; o değeri soruda verirseniz hesap sizin varsayımınız olarak yapılır.
+- Doğrulama gevşetilmedi: yorum cümleleri dayandıkları kaynağa atıf yapmak zorunda, kaynaksız sayılar çıkarılır.
+  Cevabı kütüphanede gerçekten olmayan sorular yine "bulunamadı" ile biter.
+- Yeniden indeksleme gerekmez.
+- Doğrulanan: sahte model sunucusuyla mekanizma testleri (hatırlatmanın yalnızca bir kez ve yalnızca araç
+  çağırma açıkken yapılması, değersiz arama cümlesi, cevapsız soruların "bulunamadı" kalması). Gerçek modelin
+  bu bağı ne sıklıkta kurduğu ölçülmedi; Değerlendirme penceresinde birkaç tasarım-dili sorusuyla önce/sonra
+  karşılaştırılabilir.
+
+### 0.7.1 — tablo eşleştirme ve okuma yardımı
+Gerçek bir kütüphanede VLM tablolarının yalnızca %14'ü, parametre satırlarının %10'u PDF metniyle hücre hücre
+eşleşebiliyordu; eşleşmeyenler cevapta kullanılamıyordu ve aramanın bulduğu temiz tablo yerine modele karışık
+PDF metni gidiyordu ("rerank %98 ama bulunamadı"). Bu sürüm standartların üç yaygın dizgi biçimini tanıyor ve
+eşleşmeyen tabloyu okuma yardımı olarak veriyor. Doğrulama kuralı gevşetilmedi.
+- **Alt simgeli semboller:** "t" + alt simge "RFC" (metin katmanında iki kelime) artık "tRFC" olarak bulunuyor.
+- **İki satıra taşan parametre adı:** ad satır satır, aynı hücrede alt alta aranıyor; ikinci satır doğru satırı
+  belirliyor ("… for 8Gb devices" ile "… for 16Gb devices" karışmıyor).
+- **Dipnot işaretleri:** değerden sonra yükseltilmiş işaret ("295" + üst simge "1") metin katmanında "2951" diye
+  birleşiyordu; artık ayrılıyor ve değer sayılmıyor. Metinde ve tablolarda "295⁽1⁾", on üzeri gösterimler
+  "10^-12" olarak yazılıyor — model ve doğrulama 2951 okumuyor. "2951" artık basılı değer kabul edilmiyor.
+- **Okuma yardımı:** arama PDF metniyle eşleşmeyen bir VLM tablosu bulursa model sayfanın PDF metnini ve yanında
+  o tabloyu "atıf yapılamaz okuma yardımı" olarak alıyor. Doğrulama, denetçi ve kanıt konumu yalnızca PDF metnine
+  bakıyor; yalnızca okuma yardımında geçen değer "doğrulanamadı" sayılıyor.
+- **Rerank puanı:** gösterilen puan artık modele verilen metnin puanı (önceden modelin hiç görmediği temiz
+  tablonun puanı gösterilebiliyordu).
+- **Doğrulama, boş hücreli tablo satırlarını okuyor:** "| tRFC | 295 | - | ns |" gibi satırlarda (Max boş, birim
+  ayrı sütunda) 295 değeri ns birimiyle eşleşmiyordu; doğru "tRFC 295 ns" ifadesi kaldırılabiliyordu. Artık "-",
+  "n/a" gibi boş hücreler değerle birimi ayırmıyor; "295⁽1⁾" 295 olarak okunuyor. Bu düzeltme yeniden
+  indeksleme gerektirmez.
+- **Mevcut kütüphane için:** iyileştirmeler yeni indekslenen belgelere uygulanır. Hepsine uygulamak için
+  Kütüphane → "yeniden oluştur" işaretli → "Tümünü yeniden tara". VLM cevapları önbellekten gelir (yeniden VLM
+  çağrısı yapılmaz), metni değişmeyen parçaların embedding'i korunur. Önce ve sonra kalite raporundaki tablo ve
+  parametre satırı oranlarını, Değerlendirme penceresinde aynı soru setinin sonuçlarını karşılaştırabilirsiniz.
+- Doğrulanan: sentetik PDF'lerle (alt simge, taşan ad, dipnot işareti, I²C/1st/mm² gibi değişmemesi gerekenler,
+  min/max yer değişimi ve yanlış satır gibi olumsuz durumlar) ve sahte model sunucusuyla testler. Gerçek standart
+  PDF'lerinde eşleşme oranının ne kadar artacağı ölçülmedi.
+
+### 0.7.0 — doğruluk ve ölçüm iyileştirmeleri
+**Doğruluk / güvenilirlik**
+- **Denetçi istekleri bağlama sığıyor:** denetçiye gönderilen istekler modelin bağlam uzunluğuna (ayardaki değer
+  veya sunucunun bildirdiği `max_model_len`, hangisi küçükse) yanıt payıyla birlikte sığacak şekilde gruplanıyor;
+  uzun kaynaklarda ifade başına alıntı kısaltılıyor. Başarısız bir istek ifade ifade, bağlam aşımı veya token
+  sınırında kesilen yanıtta bir kez daha kısa alıntılarla yeniden deneniyor. Kesik yanıt hiçbir zaman karar
+  sayılmıyor. Teknik denetçi hatası ("doğrulanamadı") denetçinin "desteklenmiyor" kararından ayrı gösteriliyor.
+- **VLM sayfa filtresi:** VLM'e yalnızca gerçek bir tablo işareti olan sayfalar gidiyor — satır başında tablo
+  başlığı, PDF'in bulduğu çizgili tablo veya en az üç ortak sütunda hizalı satırlar (çizgisiz ve döndürülmüş
+  tablolar dahil). Değer ve "min/max" kelimeleriyle dolu düz metin sayfaları artık tek başına seçilmiyor (önceki
+  sürümde bu tür sayfalar eşiği rahatça geçiyordu). Mevcut indeks yeniden işlenmez; kural yeni/değişen belgelere
+  ve yeniden indekslemeye uygulanır.
+- **Yanlış atıf düzeltmesi:** değeri doğru ama atfı yanlış bir ifade — değerlerin hepsi cevapla verilen başka bir
+  doğrulanmış kaynakta yazıyorsa — o kaynağın atfı eklenerek yeniden kontrol ediliyor; denetçinin onayı yine
+  gerekiyor ve düzeltme "atıf düzeltildi" olarak gösteriliyor. Ayarlardan kapatılabilir.
+- **Kaldırma gerekçeleri Türkçe:** doğrulama kutusundaki gerekçeler artık arayüz dilinde ("'1.25 V' değeri atıf
+  yapılan kaynaklarda bulunamadı", "değer [4] kaynağında geçiyor (yanlış atıf)", "Bağımsız denetleyici: kaynaklar
+  bu ifadeyi desteklemiyor").
+- **Tablo / bölüm başvuruları izleniyor:** bulunan pasaj "Table 4-12", "Section 3.2", "clause 5.4.1" veya "§ 4.5"
+  diyorsa o tablo/bölüm aynı belgeden ayrı bir kaynak olarak ekleniyor (en fazla 3; kaynak listesinde
+  "↪ başvurulan Tablo 4-12"). Bütçe doluysa yer, başvuru yapılmamış en düşük sıralı pasajdan açılıyor.
+
+**Ölçüm**
+- **Cevap geri bildirimi:** her cevabın altında 👍 / 👎; 👎 doğru değer, birim, parametre, belge ve sayfa için kısa
+  bir form açar. Kayıtlar yalnızca bu bilgisayarda, kullanıcı klasöründe tutulur (kütüphaneye yazılmaz; salt
+  okunur paylaşılan kütüphanede de çalışır); kaynak metni, kütüphane yolu, sunucu adresi veya anahtar saklanmaz.
+- **Değerlendirme penceresi:** örnek soru seti (artık exe'nin içinde), geri bildirimden çıkan aday maddeler veya
+  kendi `.yaml` dosyanız arka planda çalıştırılır (ilerleme, durdurma). Her oran pay/payda ile gösterilir; paydası
+  0 olan oran "ölçülmedi" yazar. Raporlar kullanıcı klasörüne kaydedilir ve listelenir; hata metinlerinden sunucu
+  adresi ve anahtarlar silinir. Aday maddeler `status: candidate` olarak dışa aktarılır; bir mühendis kontrol
+  edene kadar benchmark sayılmaz. Komut satırında `eval` artık varsayılan olarak gömülü seti kullanır.
+- **Gelişmiş ayarlar:** model bağlam uzunluğu (sunucunun bildirdiği değerle), denetçi grup boyutu, atıf
+  düzeltmesi, izlenecek başvuru sayısı, VLM sayfa eşiği ve sayfa sınırı — aralık denetimiyle.
+
+- Yeniden indeksleme gerekmez. Ayarlar, API anahtarları ve kütüphane aynen kullanılır.
+- Doğrulanan: tüm birim/arayüz testleri (sahte model sunucusuyla), self-test. Gerçek model sunucusuyla denetçi
+  istek boyutları, gerçek standart PDF'lerinde tablo işareti/başvuru takibi ve atıf düzeltmesinin sıklığı
+  ölçülmedi.
+
+### 0.6.1 — tablodaki değerler doğrulamada bulunuyor
+- **Düzeltme:** birimi ayrı sütunda yazan tablolardaki değerler ("Min Typ Max Unit", "VDD | 1.14 | 1.2 | 1.26 | V",
+  hücreleri ayrı satırda gelen tablolar, "Min (V)" gibi başlıkta birim) ve doğrulanmış parametre satırları
+  doğrulamada kaynakta bulunamıyordu; bu yüzden özellikle gerilim değerleri içeren doğru ifadeler "kaynaklarla
+  doğrulanamadı" diye cevaptan çıkarılıyordu. Artık değer, satırındaki veya sütun başlığındaki birimle okunuyor.
+  "800 mVpp", "5 VDC", "3.3Vaux", "1.2-V" yazımları da tanınıyor; 1200 mV = 1,2 V gibi birim çevrimleri eskisi
+  gibi geçerli.
+- Doğrulama kuralı gevşetilmedi: değer yine atıf yapılan kaynakta, aynı birimle (veya eşdeğer çevrimiyle) yazıyor
+  olmalı ve bağımsız denetçi ifadeyi ayrıca onaylamalı. Kaynakta olmayan değer (ör. tabloda 1.26 V varken 1.25 V),
+  başka birimle yazılmış değer veya bölüm numarası ("3.2") değer kanıtı sayılmıyor.
+- Yeniden indeksleme gerekmez; düzeltme cevap doğrulamasında.
+
+### 0.6.0 — netleştirici sorular, kalite raporu, mikroçip simgesi, paragraf cevaplar
+- **Netleştirici sorular:** cevap, soruda belirtilmeyen bir koşula göre gerçekten değişiyorsa cevap yerine en
+  fazla üç kısa soru sorulur — kanıt birden çok standart/sürümden geliyorsa sürüm; doğrulanmış tablo satırları
+  hız sınıfına, yoğunluğa veya sıcaklığa göre farklı değer veriyorsa o koşul; elektriksel uyumluluk sorularında
+  gerilim seviyeleri, TX/RX rolleri ve sonlandırma. Genel sorular doğrudan cevaplanır; soruda, sohbette veya
+  seçili belgelerde zaten olan bilgi yeniden sorulmaz (seçili bucket sürüm seçimi sayılmaz). Seçenekler yalnızca
+  kütüphaneden gelir (yüklü standartlar, doğrulanmış satırlardaki koşullar) ve düğme olarak sunulur; serbest metin
+  de yazılabilir. Kısa cevap ("DDR4, 2400 MT/s") bekleyen soruyla birleştirilir; yeni soru veya yeni sohbet bekleyen
+  soruyu bırakır; "bilmiyorum" koşullara bağlı, kaynaklarla doğrulanan bir açıklama verir (kesin değer veya
+  uyumluluk kararı uydurulmaz). "Netleştirme gerekiyor" durumu "kaynakta bulunamadı"dan ayrı gösterilir.
+  Netleştirme sorusu sabit bir şablondur; teknik iddia taşımaz, doğrulamayı atlatan bir yol değildir.
+- Sohbette daha önce adı geçen standart, standart belirtmeyen değer sorularında korunur ("Peki tREFI?").
+  Yeniden üretim (regeneration) artık ilk taslağın kapsam notlarını da görür.
+- **Paragraf cevaplar:** önce doğrudan cevap, sonra kısa paragraflar; liste yalnızca adımlar, bağımsız koşullar,
+  seçenekler veya kontrol listesi için, tablo karşılaştırma ve çok sayıda sayısal değer için; istenen biçime
+  uyulur. Atıflar desteklediği ifadenin yanındadır. Doğrulama gevşetilmedi ve ek model çağrısı eklenmedi: her
+  cümle yine ayrı ayrı denetlenir (paragraf sonundaki tek atıf önceki ifadeleri doğrulamaz). Kaynakta yazan
+  bilgi ile mühendislik yorumu ayrı bölümlerde kalır.
+- **İndeksleme kalite raporu (📋):** her indeksleme çalıştırmasının ve her belgenin son işlenişinin kalıcı kaydı —
+  işlenen/atlanan/yeniden kullanılan/kısmen işlenen/başarısız/erişilemeyen belgeler; VLM için seçilen, tablo
+  bulunan, incelenip tablo bulunmayan, başarısız, filtre altında kalan ve sayfa sınırı yüzünden incelenmeyen
+  sayfalar (VLM kapalıysa açıkça yazar); tablo ve parametre satırı doğrulama sayıları (her oran paydasıyla);
+  embedding ve indeks yazma hataları. Belge başına aşama, sayfa, tablo, neden, önerilen işlem ve "Sayfaya git".
+  Rapora API anahtarı, sunucu adresi veya erişim anahtarı yazılmaz. Rapor bir cevap doğruluğu ölçüsü değildir.
+- **Başarısız işlemleri yeniden dene:** kısmen işlenen belgede yalnızca başarısız VLM sayfaları yeniden denenir
+  (başarılı sayfalar önbellekten, değişmeyen parçalar mevcut embedding'iyle); diğer hatalarda belge düzeyinde
+  yeniden işlenir ve bu kapsam önceden gösterilir. Başarısız bir deneme mevcut indeksi silmez; daha kötü sonuç
+  veren deneme yazılmaz. Belgeler kalite kaydıyla birlikte tek işlemde yazılır. Komut satırı: `quality`, `retry`.
+- Yeniden işlenen belgelerde (ayar değişikliği, yeniden deneme) metni değişmeyen parçalar embedding'lerini korur:
+  embedding servisine yalnızca yeni/değişen parçalar gönderilir.
+- **Mikroçip simgesi:** başlatıcı simgesi küçük boyutta da okunan, saydam köşeli bir mikroçip oldu; uygulamanın
+  içinde her monitörün ölçeğinde çizilir (internetten bir şey indirilmez).
+- **Simgeyle aç/gizle:** sol tık — gizliyse göster ve öne al; görünür ve öndeyse gizle; küçültülmüş veya başka
+  pencerelerin arkasındaysa öne getir. Gizlemek çıkmak değildir (sohbet, seçili bucket'lar, açık PDF, panel
+  genişlikleri ve süren indeksleme korunur). Sürükleme aç/kapat tetiklemez; çift tık pencereyi açık bırakır; hızlı
+  tıklamalar sırayla işlenir. Sağ tık menüsü, tek örnek ve çoklu monitör davranışı aynı.
+- **Kaynak paneli:** PDF kaynaklarında sayfanın altındaki çıkarılmış metin alanı kaldırıldı; boşalan yer sayfa
+  görüntüsüne verildi. Vurgu, atıf→konum, yakınlaştırma, sayfa/kanıt gezinme, orijinali açma ve durum mesajları
+  aynı. Metin indekste kalır (arama, doğrulama ve kanıt eşleştirme onu kullanır). Sayfa görüntülenemezse bu
+  yazılır ve alıntılanan metin incelenebilir; PDF olmayan kaynaklarda belge bilgisi, "Orijinal dosyayı aç" ve
+  "Kaynak metnini incele" gösterilir.
+- **Yükseltme:** 0.5 kütüphanesi açılışta şema 5'e yükseltilir — yalnızca kalite raporu için iki tablo eklenir;
+  belgeler, embedding'ler, tablolar, ayarlar ve API anahtarları değişmez. Eski belgeler için raporda "kalite
+  bilgisi mevcut değil" yazar (tahmin yapılmaz).
+- Doğrulanan: tüm birim/arayüz testleri (Python 3.11 ve 3.13, Playwright ile arayüz), Windows'ta testler, iki
+  derleme, self-test ve gerçek pencerelerle GUI smoke testi (simgenin öndeyken gizlemesi, gizliyken göstermesi,
+  küçültülmüş ve örtülmüş pencereyi öne getirmesi dahil). Gerçek model sunucusuyla netleştirme sıklığı, paragraf
+  biçimine uyum ve gerçek VLM hataları ölçülmedi; gerçek çoklu monitörlü makinede denenmedi.
+
+### 0.5.0 — yeni ad: Sayısal Tasarım Uzmanı
+- Uygulamanın adı **Sayısal Tasarım Uzmanı** oldu (pencere başlığı, simge menüsü, iletiler, belgeler). Dosyalar:
+  `SayisalTasarimUzmani-portable.exe` ve `SayisalTasarimUzmani-win64.zip` (içinde `SayisalTasarimUzmani.exe`);
+  Görev Yöneticisi ve dosya özellikleri uygulamayı "Sayısal Tasarım Uzmanı" olarak gösterir.
+- Önceki sürümden yükseltme: `%APPDATA%\TechRAG` ve `%USERPROFILE%\TechRAG\library` klasörleri varsa aynen
+  kullanılır — ayarlar, API anahtarları ve kütüphane yerinde kalır. Yeni kurulumlar `SayisalTasarimUzmani`
+  klasörlerini kullanır.
+- **Proje genelinde gözden geçirme ve düzeltmeler**:
+  - *Doğrulama*: "bulunamadı" cümlesi, selamlama/giriş ifadesi ("Tabii, …", "Kısaca: …"), başlık veya kalın
+    satır ve tablo başlığı/kısa tablo satırı içindeki ifadeler artık denetimden kaçamıyor. Sayfa/bölüm numarası
+    değer kanıtı sayılmıyor. Hesap etiketi kanıt değil; kaynaktan hiç girdi almayan hesap ve sorudaki değerle
+    yapılan hesap belgelenmiş değer gibi onaylanmıyor. Denetçi uzun kaynakta ifadenin dayandığı satırları görüyor.
+  - *Kapsam*: sorudaki standart belge seçiminin içinde de uygulanıyor (yalnız DDR4 seçiliyken DDR5 sorusu
+    DDR4'ten cevaplanmıyor); bir revizyonun adı yalnızca kendi standardını sabitliyor ("PCIe 4.0 vs PCIe 5.0
+    r0.9" artık PCIe 4.0'ı yüklü değil saymıyor); araç çağrıları kapsamı genişletmiyor.
+  - *İndeksleme*: aynı taramada değişen bir dosyanın kopyası yanlış içerikle indekslenmiyor; eksi işareti (−40)
+    ve "1,200"/"1.200" ayrımı tablo doğrulamasında korunuyor; tek okunamayan dosya klasörü durdurmuyor; kesik VLM
+    cevabı "tablo yok" diye önbelleğe yazılmıyor; BOM'lu/Windows-1254 metin, Türkçe "İ" araması ve DOCX bölümleri
+    düzeldi; farklı yazılmış revizyonlar taramayı çökertmiyor.
+  - *Sunucu ve ayarlar*: salt-okunur kütüphaneye dosya yazılmıyor; ayar kaydetmek komut satırı/ortam ayarlarını
+    geri almıyor; kütüphanenin içine/kendisine yayımlama engellendi; BOM'lu veya bozuk settings.json sessizce
+    silinmiyor (yedeklenir); çözülemeyen API anahtarı üzerine yazılmıyor, şifrelenemeyen anahtar düz metin
+    kaydedilmiyor; kayıtlı anahtar yalnızca kendi sunucusuna gönderiliyor; belge açma yalnız belge türleri için;
+    aynı klasör iki kez eklenmiyor; `serve` her zaman erişim anahtarıyla açılıyor.
+  - *Masaüstü*: "Uygulamadan çık" süreci gerçekten sonlandırıyor (arka planda süren model çağrıları beklenmiyor);
+    iptal edilen oturum kapatma uygulamayı bozmuyor; başka bir programın kapatma isteği uygulamayı düzgün
+    kapatıyor; sohbet penceresi simgenin bulunduğu monitöre göre boyutlanıyor.
+  - *Arayüz*: panel düzeni, dil ve açık bucket'lar yeniden açılışta korunuyor (her açılışta değişen port bunları
+    siliyordu); hata mesajı taslakla örtülmüyor; cevap beklenirken yazılan soru kaybolmuyor; "Yeni sohbet" eski
+    cevabı yeni sohbete taşımıyor; diyalogda Enter "İptal" sayılmıyor; atıf düğmeleri doğru ifadeye bağlanıyor;
+    başka kütüphane açılınca eski seçim/sohbet temizleniyor; güncellemeden sonra eski arayüz dosyası veya silinmiş
+    belgenin sayfa görüntüsü önbellekten gösterilmiyor.
+
+### 0.4.0 — sohbet simgesiyle açılış, Notlar kaldırıldı
+- **Yuvarlak sohbet simgesi**: uygulama ekranın sağ alt köşesinde küçük bir simge olarak açılır (normal
+  pencerelerin üzerinde, klavye odağını almaz). Tıklayınca sohbet penceresi açılır; sürüklemek simgeyi taşır ve
+  sohbeti açmaz. Yeri monitör ve köşe uzaklığıyla hatırlanır; çözünürlük/DPI/görev çubuğu değişince ve monitör
+  çıkarılınca görünür alana alınır. Sağ tık: "Sohbeti aç", "Ayarlar", "Uygulamadan çık".
+- **Kapat düğmesi pencereyi gizler**: sohbet, bucket seçimi, açık PDF sayfası ve panel genişlikleri korunur,
+  indeksleme arka planda sürer, gizliyken arayüz sorgulama yapmaz. İlk seferde kısa bilgi gösterilir.
+- **Tek uygulama**: exe ikinci kez açılırsa yeni arka uç başlatılmaz, çalışan uygulamanın penceresi öne gelir.
+- **Güvenli çıkış**: "Uygulamadan çık" süren indekslemeyi belge sınırında durdurur, yazılmakta olan kaydı bitirir
+  ve sonrasında yazma başlatmaz; kalan belgeler sonraki taramada işlenir. Model önbellek dosyaları artık yarım
+  yazılamaz. Windows oturum kapatmayı engellenmez. Uygulama Windows başlangıcına eklenmez.
+- **Notlar özelliği kaldırıldı** (Notlar sekmesi, "Not olarak kaydet", dışa aktarma). Daha önce kaydedilmiş notlar
+  silinmedi (tarayıcı deposunda olduğu gibi duruyor). PDF dipnotları ve tablo notları etkilenmez.
+
+### 0.3.0 — belge klasörü ekleme ve panel düzeni
+- **Belge klasörü ekle**: ana klasörü bir kez seçin; alt klasörlerdeki desteklenen belgeler bulunur. Ana klasörün
+  doğrudan altındaki klasörler bucket olur (DDR/DDR5/… → "DDR"), kökteki dosyalar "Genel" bucket'ına gider.
+  İndekslemeden önce bucket'lar, belge sayıları ve atlanacak dosyalar gösterilir; tek "İndeksle" ile tümü işlenir.
+  Belgeler bulundukları yerden okunur, kaynak klasöre yazılmaz. Tek dosya ekleme korunuyor (aynı adlı dosyalar
+  artık üzerine yazılmıyor).
+- **Yeniden tara**: yeni ve değişen belgeler işlenir; değişmeyen, taşınan veya kopyalanan belgeler model
+  API'lerine yeniden gönderilmez. Ayrıştırma/tablo ayarları değiştiyse gereken yeniden işleme algılanır. Kaynağı
+  silinen belgeler bildirilir ve cevaplarda kullanılmaz; erişilemeyen klasör (kopuk ağ paylaşımı) belgeleri silinmiş
+  saydırmaz. İlerlemede bucket, dosya, sayı ve hatalar görünür; hız sınırında (429) sunucunun bekleme süresine uyulur.
+- **Sol panel**: dar, tamamen daraltılabilir; bucket'lar kapalı başlar, belge sayısı, arama kutusu, kapsam satırı.
+  Bucket seçimi aramayı o bucket'la sınırlar (standart/sürüm kontrolleri korunur). Durumlar yeniden açılışta korunur.
+- **Sağ panel**: sürüklenebilir ve klavyeyle ayarlanabilir genişlik, gizle/göster, kalıcı genişlik, dar pencerede
+  çekmece. PDF görüntüsü ve vurgular her genişlikte hizalı.
+- Düzeltme: son cevap gelmeden hemen önce çizilen bir taslak karesi son cevabın üzerine yazılabiliyordu.
+- İndeks şeması 4: açılışta yerinde güncellenir; yeniden indeksleme gerekmez.
+
+### 0.2.0 — doğruluk ve PDF'de kanıt vurgulama
+- **Atfa tıklayınca kanıt PDF'te vurgulanır**: ifadeyi destekleyen cümle ya da tablo değer hücresi (parametre
+  adı, sütun başlığı, birim, dipnot ile) sayfa üzerinde işaretlenir; kanıtlar arasında gezinme, vurguyu
+  gizleme ve yakınlaştırma. Döndürülmüş/kırpılmış sayfalarda hizalı; fiziksel sayfa ile basılı sayfa etiketi
+  ayrı. Konum bulunamazsa bu açıkça yazılır; orijinal PDF'e hiçbir şey yazılmaz.
+- **Doğrulama sertleşti**: denetçi hatası, zaman aşımı, bozuk/eksik/tekrarlı karar artık onay sayılmıyor
+  ("doğrulanamadı"); sorudaki sayılar kanıt sayılmıyor (ayrı "kullanıcı girdisi"); atıfsız teknik ifadeler
+  başlıktan bağımsız denetleniyor; hesap girdileri kaynağa izleniyor; cevap yalnızca doğrulanmış ifadelerden
+  kuruluyor; taslak son cevap gibi gösterilmiyor. Durumlar: destekleniyor / desteklenmiyor / doğrulanamadı / uygulanmadı.
+- **Kapsam korunuyor**: adı geçen standart/sürüm yüklü değilse başka sürümle cevap verilmiyor ("yüklü değil");
+  etiketsiz dokümanlar kesin eşleşme sayılmıyor; araçlar aynı kapsamı ve kullanıcının seçimini uyguluyor;
+  karşılaştırmalarda kanıt standart başına toplanıyor; belirsiz kapsamda kullanıcıya soruluyor.
+- **Tablolar hücre düzeyinde doğrulanıyor**: değer, parametre satırı + sütun başlığı (+ grup başlığı) kesişiminde,
+  birimi ve koşuluyla bulunmalı. Min/max yer değişimi, yanlış birim veya yanlış satır onaylanmıyor; doğrulanmamış
+  satırlar cevapta (araçla da) kullanılmıyor. `max(10 ns, 4 tCK)` gibi ifadeler ve bilinmeyen birimler SI'ye
+  çevrilmiyor.
+- **VLM tablo birleştirme tablo bazında**: aynı sayfadaki başka bir tablo artık kaybolmuyor.
+- **Belge önceliği**: doküman serisi/sürüm/revizyon/tür ayrı; Base ile CEM veya tasarım kılavuzu birbirinin
+  revizyonu sayılmıyor; guide/appnote spesifikasyonu geçersiz kılmıyor; errata ilgili belgeye (ve mümkünse
+  maddeye) bağlanıyor; eski revizyon soruda adlandırılırsa kullanılıyor; çelişen değerler belirtiliyor.
+- **Değerlendirme**: olgu tabanlı şema, cevapsız sorular, hatalı cevap / cevap vermeme oranları, kaynak/sayfa/
+  konum doğruluğu ayrı; örnek set "doğrulanmış benchmark değil" olarak işaretli.
+- **Eski kütüphaneler**: açılışta şema güncellenir; eski sürümün "doğrulanmış" saydığı tablo satırları güvenilmez
+  kabul edilir. Kütüphane → "Konum verisini oluştur" (veya `TechRAG.exe migrate`) yeniden embedding ve VLM çağrısı
+  yapmadan konum verisini ekler ve tabloları yeniden doğrular. Gerekirse `ingest --rebuild` önerilir.
+
+### 0.1.2 — kapalı ağda HTTPS sertifika hatası (`SSL: CERTIFICATE_VERIFY_FAILED`)
+- Uygulama artık **Windows sertifika deposuna** güveniyor: BT'nin dağıttığı şirket CA'sıyla imzalı model
+  sunucuları ek ayar gerektirmeden çalışır (önceden yalnızca Python'un kendi genel CA listesi kullanılıyordu).
+- **Ayarlar → Bağlantı güvenliği**: ek CA / sunucu sertifika dosyaları (.pem, .crt, .cer), sistem proxy anahtarı.
+- Kendinden imzalı sunucular için **"Bu sunucuya güven…"**: sertifika konusu, geçerliliği ve SHA-256 parmak izi
+  gösterilir, onaydan sonra kaydedilir.
+- Hata türü Türkçe açıklanır: güvenilmeyen sertifika, ad/IP uyuşmazlığı, süresi dolmuş sertifika, http/https karışıklığı.
+- `TechRAG.exe cert <url>`: komut satırından sertifika teşhisi ve güvenme. Servis başına "SSL doğrulamasını kapat" (yalnızca test).
+- Model sunucularına istekler varsayılan olarak sistem/şirket proxy'sini kullanmıyor (Ayarlar'dan açılabilir).
+
+### 0.1.1'deki düzeltme
+- **0.1.0 açılışta donuyordu** ("yanıt vermiyor" / "çalışmayı durdurdu"). pywebview, JavaScript köprüsünü
+  kurarken pencere nesnesinin içindeki .NET formuna inip nesne ağacında sonsuz özyinelemeye giriyordu.
+  Düzeltildi; derleme artık CI'da gerçek WebView2 penceresi açılarak (sayfa + JS köprüsü) test ediliyor.
+- Başlangıç günlüğü: `%APPDATA%\TechRAG\techrag.log` (her aşama, hatalar, çökme izi).
+- Tarayıcıyla indirilen zip'ten çıkarılan DLL'lerin "internetten indirildi" işareti açılışta kaldırılıyor
+  (.NET'in bu dosyaları yüklemeyi reddetmesini önler).
+
+Arayüz ve tasarım standartları (ARINC, DDR, PCIe, Ethernet, DisplayPort, USB, RS-422, I²C, genel) için
+kaynaklara bağlı, cevabı göstermeden önce doğrulayan asistan. Modeller kurum içi vLLM / SGLang
+(OpenAI uyumlu) sunucularından kullanılır; exe içinde model yoktur.
+
+### İndirme
+| Dosya | Ne zaman |
+|---|---|
+| `SayisalTasarimUzmani-portable.exe` | Tek dosya, kopyala-çalıştır (ilk açılış birkaç saniye sürer) |
+| `SayisalTasarimUzmani-win64.zip` | Klasör sürümü, daha hızlı açılır — zip'i açıp `SayisalTasarimUzmani\SayisalTasarimUzmani.exe` çalıştırın |
+
+### Gereksinimler
+- Windows 10/11 x64, **Microsoft Edge WebView2 Runtime** (Windows 11'de hazır; Windows 10'da yoksa
+  "Evergreen Standalone Installer" çevrimdışı kurulumu).
+- Erişilebilir vLLM uç noktaları: sohbet (tool calling açık), isteğe bağlı ayrı görsel model, embedding, reranker.
+
+### İlk adımlar
+1. `SayisalTasarimUzmani.exe` açılınca ekranın sağ altında mikroçip simgesi belirir; tıklayınca sohbet penceresi
+   açılır. **Ayarlar**: üstteki ortak API anahtarını girin; her servis için API adresi (`http://sunucu:8000/v1`) ve
+   modeli açılır listeden seçin, **Test et**.
+2. **Admin › Ortak kütüphane › Belge klasörü ekle**: belgelerinizin ana klasörünü seçin; alt klasörler bucket olur,
+   belgeler yerinde okunur. İndeksleme sonucu kalite raporunda görünür. Kendi dosyalarınız için sol paneldeki
+   **Kişisel › Dosya seç…**.
+3. Soru sorun; cevap yanlış veya eksikse 👎 ile doğru değeri ve sayfasını ekleyin. **Admin › Değerlendirme**
+   sekmesinden örnek seti veya kendi soru dosyanızı çalıştırabilirsiniz. Komut satırı da aynı exe ile çalışır:
+   `SayisalTasarimUzmani.exe doctor`, `... rescan`, `... quality`, `... docs`, `... eval`.
+
+Kütüphane varsayılan olarak `%USERPROFILE%\SayisalTasarimUzmani\library` altındadır; ayarlar
+`%APPDATA%\SayisalTasarimUzmani\settings.json` (eski `TechRAG` klasörleri varsa onlar kullanılır).
+Ayrıntılar: depodaki `README.md`.
+
+### Bilinen sınırlamalar
+- Testler sahte bir OpenAI uyumlu sunucu ve üretilmiş PDF'lerle yapıldı; gerçek model sunucularına ve gerçek
+  standart PDF'lerine karşı doğruluk ölçülmedi. VLM tablo eşiği ve rerank ayarlarının kendi dokümanlarınızla
+  (Değerlendirme penceresi, "yalnızca erişim" veya `SayisalTasarimUzmani.exe eval --retrieval-only`)
+  ayarlanması gerekir. Kaynaklara bağlı doğruluk
+  garanti edilmez; doğrulama yanlışların bir kısmını yakalar.
+- Exe imzasızdır; Windows SmartScreen ilk açılışta uyarı verebilir ("Daha fazla bilgi → Yine de çalıştır").

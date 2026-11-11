@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+build/
+dist/
+
+# Library contents (indexes, caches, licensed standard documents) and reports
+data/library/**
+!data/library/sources/
+!data/library/sources/*/
+!data/library/sources/*/.gitkeep
+data/eval_reports/
+*.tgz
+*.zip

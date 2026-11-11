@@ -1,0 +1,671 @@
+"""Entity-first retrieval.
+
+scope:   UI selection > standards named in the question (hard filter: only documents TAGGED with that
+         standard/version, incl. its errata/ECN; untagged documents are not assumed to match) > collections
+         named in the question > everything. A named standard that is not loaded is reported, never
+         replaced by a sibling (no DDR4 answer to a DDR5 question). Superseded revisions are excluded unless
+         the question names that revision or the user selects the document.
+search:  BM25 (FTS5) + dense vectors -> reciprocal rank fusion -> cross-encoder rerank (API); questions about
+         several standards are retrieved per standard so each gets its own evidence
+expand:  small-to-big: a hit grows to its whole section when the section is short, else to neighbours;
+         search-only content (unverified VLM tables) is replaced by the original text of its page
+"""
+
+from __future__ import annotations
+
+import re
+import threading
+import time
+from dataclasses import asdict, dataclass, field
+from typing import Optional, Sequence
+
+import numpy as np
+
+from techrag.config import Config
+from techrag.embeddings import Embedder
+from techrag.ingest.chunker import estimate_tokens
+from techrag.ingest.structure import SECTION_SEP
+from techrag.ingest.metadata import AMENDING_TYPES, amended_targets, doc_series
+from techrag.query import QueryPlan
+from techrag.reranker import Reranker
+from techrag.store import ChunkRow, DocumentRow, ParameterRow, Store
+
+_FIGURE_REF = re.compile(r"\b(figure|fig\.|şekil|timing diagram|waveform|eye diagram|pin ?out|pinout|"
+                         r"block diagram|state diagram)\b", re.I)
+
+
+# "Table 4-12", "see Section 3.2", "clause 5.4.1", "§ 4.5" in a passage's text
+_XREF = re.compile(r"\b(?:table|tablo)\s+(?P<table>[A-Z]?\d+(?:[.\-–]\d+)*[a-z]?)(?![\w.\-–]*\d)|"
+                   r"\b(?:section|sec\.|clause|subclause|bölüm|madde)\s+(?P<section>\d+(?:\.\d+)+)(?![.\d]*\d)|"
+                   r"§\s*(?P<para>\d+(?:\.\d+)+)(?![.\d]*\d)", re.I)
+
+
+def _label_pattern(label: str) -> str:
+    """'4-12' also matches '4–12' (the PDF may print either dash)."""
+    return "[\\-–]".join(re.escape(part) for part in re.split(r"[\-–]", label))
+
+
+def _caption_line(label: str) -> re.Pattern:
+    """A line that is the caption of table `label` (not a reference to it inside running text)."""
+    return re.compile(r"^\s*(?i:table|tablo)\s+" + _label_pattern(label) + r"(?![\w.\-–]*\d)\s*(?:$|[—–:.\-(]|[A-Z0-9])",
+                      re.M)
+
+
+def _section_number(section: str, number: str) -> bool:
+    last = section.split(SECTION_SEP)[-1].strip() if section else ""
+    return bool(re.match(re.escape(number) + r"(?![.\d]*\d)(?:\s|$|[:.)\-–])", last))
+
+
+@dataclass
+class Passage:
+    doc_id: int
+    doc_title: str
+    doc_path: str
+    domain: str
+    section: str
+    page_start: int
+    page_end: int
+    kind: str
+    text: str
+    score: float
+    chunk_ids: list[int]
+    hit_chunk_ids: list[int]
+    entities: list[str] = field(default_factory=list)
+    doc_type: str = "base"
+    revision: str = ""
+    figure_page: Optional[int] = None
+    referenced_as: str = ""         # "Table 4-12" / "Section 3.2": added because another passage refers to it
+    aid: str = ""                   # reading aid: the vision model's (unmatched) table of this page, not evidence
+    replaced: bool = False          # the search hit was an unmatched VLM table, replaced by the page's PDF text
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class Scope:
+    doc_ids: Optional[list[int]] = None        # None = no restriction
+    domains: Optional[list[str]] = None
+    reason: str = "all"                         # user | entity | entity_missing | domain | all
+    entities: list[str] = field(default_factory=list)   # named standards that are loaded
+    missing: list[str] = field(default_factory=list)    # named standards without any loaded document
+    per_entity: dict = field(default_factory=dict)      # standard -> doc ids (separate evidence per standard)
+    notes: list[str] = field(default_factory=list)      # disclosed decisions (old revision, widening, ...)
+    widened: bool = False
+    explicit_revisions: list[int] = field(default_factory=list)
+    buckets: list[str] = field(default_factory=list)    # bucket ids the user restricted the search to
+
+    @property
+    def empty(self) -> bool:
+        return self.doc_ids is not None and not self.doc_ids
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class RetrievalResult:
+    plan: QueryPlan
+    passages: list[Passage]
+    scope: Scope
+    parameters: list[ParameterRow] = field(default_factory=list)
+    confidence: Optional[float] = None
+    candidates: int = 0
+    timings: dict = field(default_factory=dict)
+
+
+def rrf_fuse(ranked_lists: Sequence[Sequence[tuple[int, float]]], k: int = 60) -> list[tuple[int, float]]:
+    scores: dict[int, float] = {}
+    for lst in ranked_lists:
+        for rank, (cid, _) in enumerate(lst):
+            scores[cid] = scores.get(cid, 0.0) + 1.0 / (k + rank + 1)
+    return sorted(scores.items(), key=lambda kv: -kv[1])
+
+
+def join_chunks(rows: Sequence[ChunkRow]) -> str:
+    """Concatenate consecutive chunks, dropping the overlap each repeats from its predecessor."""
+    parts: list[str] = []
+    prev: Optional[ChunkRow] = None
+    for r in rows:
+        text = r.text
+        if prev is not None and r.ordinal == prev.ordinal + 1 and r.overlap:
+            text = text[r.overlap:]
+        if r.kind == "table" and parts:
+            caption, _, rest = text.partition("\n")
+            if rest and parts[-1].rstrip().endswith(caption.strip()):
+                text = rest
+        parts.append(text.strip())
+        prev = r
+    return "\n\n".join(p for p in parts if p)
+
+
+class DocCatalog:
+    """Small in-memory view of the documents table, refreshed when the index changes."""
+
+    def __init__(self, store: Store):
+        self.store = store
+        self._version: Optional[str] = None
+        self._docs: dict[int, DocumentRow] = {}
+        self._amends: dict[int, list[int]] = {}
+        self._lock = threading.Lock()
+
+    def docs(self) -> dict[int, DocumentRow]:
+        version = self.store.get_meta("index_version")
+        with self._lock:
+            if version != self._version:
+                self._docs = {d.id: d for d in self.store.documents()}
+                docs = list(self._docs.values())
+                self._amends = {d.id: amended_targets(d, docs) for d in docs if d.doc_type in AMENDING_TYPES}
+                self._version = version
+            return self._docs
+
+    def amends(self, doc_id: int) -> list[int]:
+        """Base documents an errata/ECN/amendment applies to ([] when not identified)."""
+        self.docs()
+        return list(self._amends.get(doc_id, []))
+
+    def amended_by(self, doc_id: int) -> list[int]:
+        self.docs()
+        return [e for e, targets in self._amends.items() if doc_id in targets]
+
+    def revision_mentions(self, text: str, entities: Sequence[str] = ()) -> list[int]:
+        """Documents whose specific revision the text names ('JESD79-4B', 'DDR4 rev B', 'PCIe 5.0 r0.9')."""
+        if not text:
+            return []
+        low = text.lower()
+        ents = {e.lower() for e in entities}
+        out = []
+        for d in self.docs().values():
+            rev = (d.revision or "").lower()
+            if not rev:
+                continue
+            key = doc_series(d)
+            if key.startswith("jesd") and re.search(r"\b" + re.escape(key) + r"\s?" + re.escape(rev) + r"\b", low):
+                out.append(d.id)
+                continue
+            rev_re = re.compile(r"\b(?:rev(?:ision)?|r|version|ver)\.?\s*" + re.escape(rev) + r"(?![\w.])")
+            # The revision must follow THIS document's standard ("PCIe 4.0 vs PCIe 5.0 r1.0" names a revision of
+            # PCIe 5.0 only): look right after each mention of its standard, up to the next separator.
+            windows = []
+            for e in d.entities:
+                for m in re.finditer(re.escape(e.lower()), low):
+                    tail = low[m.end():m.end() + 32]
+                    stop = _MENTION_STOP.search(tail)
+                    windows.append(tail[:stop.start()] if stop else tail)
+            if windows:
+                hit = any(rev_re.search(w) for w in windows)
+            else:  # the standard is not spelled out: only an unambiguous question can name its revision
+                named = (bool(ents & {e.lower() for e in d.entities}) and len(ents) <= 1) or \
+                    (key and all(t in low for t in key.split()))
+                hit = bool(named and rev_re.search(low))
+            if hit:
+                out.append(d.id)
+        return out
+
+    def resolve_scope(self, plan: Optional[QueryPlan], domains: Optional[Sequence[str]] = None,
+                      doc_ids: Optional[Sequence[int]] = None, entity_filter: bool = True,
+                      domain_routing: bool = True, standard: str = "",
+                      entities: Optional[Sequence[str]] = None, buckets: Optional[Sequence[str]] = None) -> Scope:
+        docs = self.docs()
+        wanted = list(entities) if entities else ([standard] if standard else (plan.entities if plan else []))
+        text = f"{plan.question} {plan.standalone}" if plan else standard
+        explicit = self.revision_mentions(text, wanted)
+        pinned = {_same_document(docs[i]) for i in explicit}
+        notes: list[str] = []
+
+        def usable(d: DocumentRow) -> bool:
+            if d.missing:
+                return False  # its source file is gone: stale content never enters an answer
+            if d.id in explicit:
+                return True
+            if d.doc_type == "base" and _same_document(d) in pinned:
+                return False  # another revision of a document whose revision the user named
+            return d.superseded_by is None
+
+        pool = [d for d in docs.values() if usable(d)]
+        for i in explicit:
+            d = docs[i]
+            notes.append(f"'{d.title}' (rev {d.revision}) is used because the question names that revision"
+                         + (" although a newer revision is loaded" if d.superseded_by else ""))
+
+        def tagged(ds: Sequence[DocumentRow], e: str) -> list[int]:
+            return [d.id for d in ds if e.lower() in {x.lower() for x in d.entities}]
+
+        gone = [i for i in (doc_ids or []) if i in docs and docs[i].missing]
+        if gone:
+            notes.append(f"{len(gone)} selected document(s) skipped: their source file is missing")
+            doc_ids = [i for i in doc_ids if i not in set(gone)]
+            if not doc_ids and not buckets:
+                return Scope(doc_ids=[], reason="user", notes=notes)
+        if buckets:
+            # A bucket narrows the pool; standard/version filtering and revision rules still apply inside it.
+            bset = set(buckets)
+            chosen = [docs[i] for i in (doc_ids or []) if i in docs]
+            pool = [d for d in pool if d.bucket_id in bset]
+            notes.append("restricted to the selected bucket(s)" + (" and documents" if chosen else ""))
+            if entity_filter and wanted:
+                cand = pool + [d for d in chosen if d not in pool]
+                per = {e: tagged(cand, e) for e in wanted}
+                found = {e: ids for e, ids in per.items() if ids}
+                return Scope(doc_ids=sorted({i for v in found.values() for i in v}),
+                             reason="entity" if found else "entity_missing", entities=list(found),
+                             missing=[e for e in wanted if not per[e]], per_entity=found, notes=notes,
+                             explicit_revisions=explicit, buckets=list(buckets))
+            ids = sorted({d.id for d in pool} | {d.id for d in chosen})
+            return Scope(doc_ids=ids, reason="user", notes=notes, explicit_revisions=explicit, buckets=list(buckets))
+        if doc_ids:
+            sel = [docs[i] for i in doc_ids if i in docs]
+            if entity_filter and wanted:
+                # The standard named in the question still applies inside the user's selection: a DDR5 question
+                # with a DDR4 document selected is "not in the selection", never answered from DDR4.
+                per = {e: tagged(sel, e) for e in wanted}
+                found = {e: ids for e, ids in per.items() if ids}
+                missing = [e for e in wanted if not per[e]]
+                notes.append("restricted to the selected documents")
+                if missing:
+                    notes.append(f"none of the selected documents is tagged {', '.join(missing)}")
+                return Scope(doc_ids=sorted({i for v in found.values() for i in v}),
+                             reason="entity" if found else "entity_missing", entities=list(found), missing=missing,
+                             per_entity=found, notes=notes, explicit_revisions=explicit)
+            return Scope(doc_ids=list(doc_ids), reason="user", notes=notes, explicit_revisions=explicit)
+        if domains:
+            pool = [d for d in pool if d.domain in set(domains)]
+            if not (entity_filter and wanted):
+                return Scope(doc_ids=[d.id for d in pool], domains=list(domains), reason="user", notes=notes,
+                             explicit_revisions=explicit)
+        if entity_filter and wanted:
+            per = {e: tagged(pool, e) for e in wanted}
+            found = {e: ids for e, ids in per.items() if ids}
+            missing = [e for e in wanted if not per[e]]
+            ids = sorted({i for v in found.values() for i in v})
+            return Scope(doc_ids=ids, domains=list(domains) if domains else None,
+                         reason="entity" if found else "entity_missing", entities=list(found), missing=missing,
+                         per_entity=found, notes=notes, explicit_revisions=explicit)
+        if domain_routing and plan and plan.domains:
+            ids = [d.id for d in pool if d.domain in set(plan.domains)]
+            if ids:
+                return Scope(doc_ids=ids, domains=list(plan.domains), reason="domain", notes=notes,
+                             explicit_revisions=explicit)
+        restricted = len(pool) != len(docs)
+        return Scope(doc_ids=[d.id for d in pool] if restricted else None, reason="all", notes=notes,
+                     explicit_revisions=explicit)
+
+
+_MENTION_STOP = re.compile(r"\b(?:vs|versus|and|or|ve|veya|ile|ya da|compared|karşı\w*)\b|[,;/]")
+
+
+def _same_document(d: DocumentRow) -> tuple:
+    """Revisions of the same document share series, version and standard set (as in compute_supersedence):
+    naming a revision of PCIe 5.0 must not drop PCIe 4.0."""
+    return doc_series(d), d.version, tuple(sorted(e.lower() for e in d.entities))
+
+
+AID_TOKENS = 1200      # per page: the reading aid is cut to this size
+
+
+def _cut_tokens(text: str, tokens: int) -> str:
+    if estimate_tokens(text) <= tokens:
+        return text
+    lines, out, used = text.split("\n"), [], 0
+    for ln in lines:
+        t = estimate_tokens(ln) + 1
+        if out and used + t > tokens:
+            break
+        out.append(ln)
+        used += t
+    return "\n".join(out) + "\n(...)"
+
+
+def _groups(included: dict[tuple[int, int], ChunkRow]) -> list[list[ChunkRow]]:
+    """Consecutive chunks of the same section form one passage."""
+    groups: list[list[ChunkRow]] = []
+    for key in sorted(included):
+        row = included[key]
+        last = groups[-1][-1] if groups else None
+        if last and last.doc_id == row.doc_id and last.ordinal + 1 == row.ordinal and last.section == row.section:
+            groups[-1].append(row)
+        else:
+            groups.append([row])
+    return groups
+
+
+class Retriever:
+    def __init__(self, cfg: Config, store: Store, embedder: Embedder, reranker: Optional[Reranker],
+                 catalog: Optional[DocCatalog] = None):
+        self.cfg = cfg
+        self.store = store
+        self.embedder = embedder
+        self.reranker = reranker
+        self.catalog = catalog or DocCatalog(store)
+
+    # ----------------------------------------------------------- candidates
+    def _candidates(self, plan: QueryPlan, scope: Scope, timings: dict) -> list[tuple[int, float]]:
+        rc = self.cfg.retrieval
+        lists: list[list[tuple[int, float]]] = []
+        t = time.time()
+        for q in plan.bm25_queries():
+            lists.append(self.store.search_bm25(q, rc.bm25_top_k, None, scope.doc_ids))
+        timings["bm25"] = round(timings.get("bm25", 0) + time.time() - t, 3)
+        t = time.time()
+        index = self.store.vectors()
+        if time.time() - t > 0.05:   # loaded now (first question, or the library changed)
+            timings["vectors"] = round(timings.get("vectors", 0) + time.time() - t, 3)
+        t = time.time()
+        if index.size:
+            qvecs = self.embedder.embed_queries(plan.dense_queries())
+            mask = index.mask(None, scope.doc_ids)
+            if len(qvecs):
+                lists += index.search_many(np.asarray(qvecs), rc.dense_top_k, mask)
+        timings["dense"] = round(timings.get("dense", 0) + time.time() - t, 3)
+        return rrf_fuse(lists, rc.rrf_k)
+
+    def _rank(self, plan: QueryPlan, scope: Scope, timings: dict) -> tuple[list[tuple[ChunkRow, float]], Optional[float]]:
+        rc = self.cfg.retrieval
+        fused = self._candidates(plan, scope, timings)
+        n_cand = self.cfg.reranker.candidates if self.reranker else max(2 * rc.final_top_k, 16)
+        fused = fused[:n_cand]
+        rows = self.store.chunks_by_ids(cid for cid, _ in fused)
+        ranked: list[tuple[ChunkRow, float]] = [(rows[cid], s) for cid, s in fused if cid in rows]
+        confidence = None
+        if self.reranker and ranked:
+            t = time.time()
+            docs = self.catalog.docs()
+            texts = [f"{', '.join(docs[r.doc_id].entities) if r.doc_id in docs else ''} | {r.doc_title} | "
+                     f"{r.section}\n{r.text}" for r, _ in ranked]
+            scores = self.reranker.score(plan.rerank_query, texts)
+            ranked = sorted(((r, s) for (r, _), s in zip(ranked, scores)), key=lambda x: -x[1])
+            confidence = ranked[0][1]
+            timings["rerank"] = round(timings.get("rerank", 0) + time.time() - t, 3)
+        return ranked, confidence
+
+    def search(self, plan: QueryPlan, domains: Optional[Sequence[str]] = None,
+               doc_ids: Optional[Sequence[int]] = None, top_k: Optional[int] = None, standard: str = "",
+               budget_tokens: Optional[int] = None, with_parameters: bool = True,
+               scope: Optional[Scope] = None, buckets: Optional[Sequence[str]] = None) -> RetrievalResult:
+        rc = self.cfg.retrieval
+        timings: dict = {}
+        if scope is None:
+            scope = self.catalog.resolve_scope(plan, domains, doc_ids, rc.entity_filter, rc.domain_routing, standard,
+                                               buckets=buckets)
+        if scope.empty:
+            return RetrievalResult(plan, [], scope, [], None, 0, timings)
+        k = top_k or rc.final_top_k
+        budget = budget_tokens or int(self.cfg.llm.context_tokens * 0.6)
+        if len(scope.per_entity) > 1:
+            # One evidence pool per named standard: a comparison never answers one side from the other.
+            per_k = max(2, -(-k // len(scope.per_entity)))
+            selected: list[tuple[ChunkRow, float]] = []
+            confidence = None
+            n = 0
+            for ent, ids in scope.per_entity.items():
+                ranked, conf = self._rank(plan, Scope(doc_ids=ids, reason="entity", entities=[ent]), timings)
+                selected += ranked[:per_k]
+                n += len(ranked)
+                if conf is not None:
+                    confidence = conf if confidence is None else min(confidence, conf)
+            passages = self.build_passages(selected, budget)
+            rescored = self._rescore(plan, passages, timings)
+            passages = self.with_references(passages, budget)
+            if rescored:
+                confidence = min((max((p.score for p in passages if p.doc_id in ids and not p.referenced_as),
+                                      default=0.0) for ids in scope.per_entity.values()), default=None)
+            params: list[ParameterRow] = []
+            if with_parameters and plan.wants_parameters:
+                for ids in scope.per_entity.values():
+                    params += self.parameters(plan, Scope(doc_ids=ids, reason="entity"),
+                                              k=max(3, rc.parameter_rows // len(scope.per_entity)))
+            return RetrievalResult(plan, passages, scope, params, confidence, n, timings)
+
+        ranked, confidence = self._rank(plan, scope, timings)
+        if not ranked and scope.reason == "domain":
+            # Collection routing is a guess from keywords (not a standard the user named): widen, and say so.
+            wider = self.catalog.resolve_scope(None, entity_filter=False, domain_routing=False)
+            wider.widened = True
+            wider.notes = scope.notes + [f"nothing matched in collection(s) {', '.join(scope.domains or [])}; "
+                                         "searched the whole library"]
+            scope = wider
+            ranked, confidence = self._rank(plan, scope, timings)
+        passages = self.build_passages(ranked[:k], budget)
+        rescored = self._rescore(plan, passages, timings)
+        passages = self.with_references(passages, budget)
+        if rescored:
+            confidence = max((p.score for p in passages if not p.referenced_as), default=None)
+        params = []
+        if with_parameters and plan.wants_parameters:
+            params = self.parameters(plan, scope)
+        return RetrievalResult(plan, passages, scope, params, confidence, len(ranked), timings)
+
+    def _rescore(self, plan: QueryPlan, passages: list[Passage], timings: dict) -> bool:
+        """A passage that stands in for an unmatched VLM table (the page's PDF text) is scored again by the
+        reranker: the score shown and used for ordering is that of the text the model actually gets, not of the
+        clean table it never sees. True when scores changed."""
+        todo = [p for p in passages if p.replaced]
+        if not self.reranker or not todo:
+            return False
+        t = time.time()
+        try:
+            docs = self.catalog.docs()
+            scores = self.reranker.score(plan.rerank_query, [
+                f"{', '.join(docs[p.doc_id].entities) if p.doc_id in docs else ''} | {p.doc_title} | {p.section}\n"
+                f"{p.text}" for p in todo])
+        except Exception:
+            return False        # the hit's own score stays (the answer does not depend on it)
+        for p, sc in zip(todo, scores):
+            p.score = float(sc)
+        passages.sort(key=lambda p: -p.score)
+        timings["rerank"] = round(timings.get("rerank", 0) + time.time() - t, 3)
+        return True
+
+    def parameters(self, plan: QueryPlan, scope: Scope, k: Optional[int] = None) -> list[ParameterRow]:
+        k = k or self.cfg.retrieval.parameter_rows
+        if scope.empty:
+            return []
+        query = " ".join(plan.parameters + plan.keywords[:6] + [plan.english])
+        return self.store.search_parameters(query, k, scope.doc_ids, verified_only=True)
+
+    # ------------------------------------------------------------- passages
+    def _evidence_rows(self, selected: list[tuple[ChunkRow, float]]) -> list[tuple[ChunkRow, float]]:
+        return self._evidence_and_aids(selected)[0]
+
+    def _evidence_and_aids(self, selected: list[tuple[ChunkRow, float]]
+                           ) -> tuple[list[tuple[ChunkRow, float]], dict[tuple[int, int], list[str]], set]:
+        """Search-only hits (VLM tables not matched to the PDF text cell by cell) are replaced by the original
+        text of their page. Returns (rows, reading aids per (doc, page): the replaced VLM tables, keys of the rows
+        that stand in for such a hit)."""
+        out: list[tuple[ChunkRow, float]] = []
+        seen: set[tuple[int, int]] = set()
+        aids: dict[tuple[int, int], list[str]] = {}
+        replaced: set[tuple[int, int]] = set()
+        for row, score in selected:
+            if row.evidence:
+                rows = [row]
+            else:
+                rows = self.store.page_chunks(row.doc_id, row.page_start)
+                if rows:
+                    aids.setdefault((row.doc_id, row.page_start), []).append(row.text)
+            for r in rows:
+                key = (r.doc_id, r.ordinal)
+                if key not in seen:
+                    seen.add(key)
+                    out.append((r, score))
+                    if not row.evidence:
+                        replaced.add(key)
+        return out, aids, replaced
+
+    def build_passages(self, selected: list[tuple[ChunkRow, float]], budget: int) -> list[Passage]:
+        rc = self.cfg.retrieval
+        docs = self.catalog.docs()
+        selected, aids, replaced = self._evidence_and_aids(selected)
+        used = 0
+        included: dict[tuple[int, int], ChunkRow] = {}
+        hit_score: dict[tuple[int, int], float] = {}
+        for row, score in selected:
+            key = (row.doc_id, row.ordinal)
+            if key in included:
+                hit_score[key] = max(hit_score.get(key, 0.0), score)
+                continue
+            t = estimate_tokens(row.text)
+            if included and used + t > budget:
+                break
+            included[key] = row
+            hit_score[key] = score
+            used += t
+
+        # Reading aids come before the small-to-big expansion: for a page whose table the search found only in
+        # the vision model's (unmatched) version, that version helps the model read the PDF text of the table.
+        aid_text: dict[tuple[int, int], str] = {}
+        pages_in = {(r.doc_id, p) for r in included.values() for p in range(r.page_start, r.page_end + 1)}
+        for key, texts in aids.items():
+            if key not in pages_in:
+                continue
+            txt = _cut_tokens("\n\n".join(dict.fromkeys(texts)), AID_TOKENS)
+            t = estimate_tokens(txt)
+            if used + t <= budget:
+                aid_text[key] = txt
+                used += t
+
+        # Small-to-big: whole section if short, else neighbours within the section.
+        for key in sorted(hit_score, key=lambda k: -hit_score[k]):
+            row = included[key]
+            section = self.store.section_chunks(row.doc_id, row.section) if row.section else []
+            sec_tokens = sum(estimate_tokens(c.text) for c in section)
+            if section and sec_tokens <= rc.section_expand_tokens:
+                extra = section
+            else:
+                w = rc.neighbor_window
+                extra = [c for c in self.store.neighbors(row.doc_id, row.ordinal - w, row.ordinal + w)
+                         if c.section == row.section]
+            for nb in extra:
+                nkey = (nb.doc_id, nb.ordinal)
+                if nkey in included or not nb.evidence:
+                    continue
+                t = estimate_tokens(nb.text)
+                if used + t > budget:
+                    continue
+                included[nkey] = nb
+                used += t
+
+        passages = [self._passage(g, hit_score, docs) for g in _groups(included)]
+        key_of = {r.id: k for k, r in included.items()}
+        for p in passages:
+            hits = [key_of[c] for c in p.chunk_ids if key_of.get(c) in hit_score]
+            p.replaced = bool(hits) and all(k in replaced for k in hits)
+            for page in range(p.page_start, p.page_end + 1):
+                txt = aid_text.pop((p.doc_id, page), "")
+                if txt:
+                    p.aid = f"{p.aid}\n\n{txt}".strip()
+        passages.sort(key=lambda p: -p.score)
+        return passages
+
+    @staticmethod
+    def _passage(g: list[ChunkRow], hit_score: dict, docs: dict, referenced_as: str = "",
+                 score: Optional[float] = None) -> Passage:
+        hits = [r for r in g if (r.doc_id, r.ordinal) in hit_score]
+        first = g[0]
+        doc = docs.get(first.doc_id)
+        text = join_chunks(g)
+        fig_pages = set((doc.metadata.get("figure_pages") or []) if doc else [])
+        fig = None
+        if fig_pages and _FIGURE_REF.search(text):
+            fig = next((p for r in g for p in range(r.page_start, r.page_end + 1) if p in fig_pages), None)
+        return Passage(
+            doc_id=first.doc_id, doc_title=first.doc_title, doc_path=first.doc_path, domain=first.domain,
+            section=first.section, page_start=min(r.page_start for r in g), page_end=max(r.page_end for r in g),
+            kind="table" if all(r.kind == "table" for r in g) else "text", text=text,
+            score=float(score if score is not None else
+                        max((hit_score[(r.doc_id, r.ordinal)] for r in hits), default=0.0)),
+            chunk_ids=[r.id for r in g], hit_chunk_ids=[r.id for r in hits],
+            entities=list(doc.entities) if doc else [], doc_type=doc.doc_type if doc else "base",
+            revision=doc.revision if doc else "", figure_page=fig, referenced_as=referenced_as,
+        )
+
+    # ------------------------------------------------------- cross-references
+    def _table_rows(self, doc_id: int, label: str) -> list[ChunkRow]:
+        cap = _caption_line(label)
+        found: dict[int, ChunkRow] = {}
+        for needle in dict.fromkeys([label, label.replace("-", "–"), label.replace("–", "-")]):
+            for r in self.store.chunks_containing(doc_id, needle):
+                if cap.search(r.text):
+                    found[r.ordinal] = r
+        rows = [found[o] for o in sorted(found)]
+        if rows:
+            last = rows[-1]
+            tail = [ln for ln in last.text.split("\n") if ln.strip()][-3:]
+            if any(cap.search(ln) for ln in tail):   # the caption ends its chunk: the table is in the next one
+                rows += [r for r in self.store.neighbors(doc_id, last.ordinal + 1, last.ordinal + 1)
+                         if r.section == last.section]
+        return rows
+
+    def _section_rows(self, doc_id: int, number: str) -> list[ChunkRow]:
+        section = next((s for s in self.store.doc_sections(doc_id) if _section_number(s, number)), None)
+        return self.store.section_chunks(doc_id, section) if section else []
+
+    def follow_references(self, passages: list[Passage]) -> list[tuple[int, Passage]]:
+        """Tables and sections the passages refer to, from the passage's own document (so always inside the
+        scope that produced it): [(index of the referring passage, passage)], at most
+        retrieval.follow_references, each cut to retrieval.reference_tokens. Already included text is skipped."""
+        rc = self.cfg.retrieval
+        if rc.follow_references <= 0 or not passages:
+            return []
+        have = {cid for p in passages for cid in p.chunk_ids}
+        docs = self.catalog.docs()
+        out: list[tuple[int, Passage]] = []
+        seen: set[tuple] = set()
+        for i, p in enumerate(passages):
+            for m in _XREF.finditer(p.text):
+                if len(out) >= rc.follow_references:
+                    return out
+                if m.group("table"):
+                    kind, label = "table", m.group("table").rstrip(".")
+                else:
+                    kind, label = "section", (m.group("section") or m.group("para")).rstrip(".")
+                key = (p.doc_id, kind, label.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows = self._table_rows(p.doc_id, label) if kind == "table" else self._section_rows(p.doc_id, label)
+                rows = [r for r, _ in self._evidence_rows([(r, 0.0) for r in rows])]
+                if not rows or all(r.id in have for r in rows):
+                    continue
+                taken, used = [], 0
+                for r in rows:
+                    t = estimate_tokens(r.text)
+                    if taken and used + t > rc.reference_tokens:
+                        break
+                    taken.append(r)
+                    used += t
+                taken = [r for r in taken if r.id not in have]
+                if not taken:
+                    continue
+                have.update(r.id for r in taken)
+                name = f"{'Table' if kind == 'table' else 'Section'} {label}"
+                for g in _groups({(r.doc_id, r.ordinal): r for r in taken}):
+                    out.append((i, self._passage(g, {}, docs, referenced_as=name, score=p.score * 0.9)))
+        return out
+
+    def with_references(self, passages: list[Passage], budget: int) -> list[Passage]:
+        """The passages plus what they refer to. When the token budget is full, the lowest ranked passages that
+        no reference came from make room; a reference that still does not fit is left out."""
+        refs = self.follow_references(passages)
+        if not refs:
+            return passages
+        keep = list(range(len(passages)))
+        parents = {i for i, _ in refs}
+
+        def used() -> int:
+            return sum(estimate_tokens(passages[i].text) for i in keep)
+
+        added: list[Passage] = []
+        for parent, ref in refs:
+            over = used() + sum(estimate_tokens(a.text) for a in added) + estimate_tokens(ref.text) - budget
+            drop: list[int] = []
+            for i in sorted((i for i in keep if i not in parents and passages[i].score < ref.score),
+                            key=lambda i: passages[i].score):
+                if over <= 0:
+                    break
+                drop.append(i)
+                over -= estimate_tokens(passages[i].text)
+            if over <= 0:       # it fits (after making room); otherwise nothing is dropped for it
+                keep = [i for i in keep if i not in drop]
+                added.append(ref)
+        return [passages[i] for i in keep] + added

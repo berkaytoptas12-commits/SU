@@ -1,0 +1,88 @@
+# Sayısal Tasarım Uzmanı (techrag) example configuration (optional).
+# The desktop app stores its settings in %APPDATA%\SayisalTasarimUzmani\settings.json (Settings dialog); this file is
+# for CLI / server use. Layering: defaults -> this file -> settings.json -> TECHRAG_<SECTION>__<KEY> env vars.
+# All models are reached over OpenAI-compatible HTTP endpoints (vLLM / SGLang). base_url ends with /v1.
+
+offline: true
+read_only: false                     # true: open a shared library without writing (e.g. from a network share)
+
+auth:
+  api_key: ""                        # ONE key for every model server (chat/vLLM, vision, embedding, reranker);
+                                     # or TECHRAG_AUTH__API_KEY. Never commit a real key.
+
+paths:
+  library_dir: data/library          # sources/<collection>/*.pdf + index.sqlite + cache/vlm
+  cache_dir: ""                      # local page-render cache ("" = per-user cache folder)
+  domains_file: ""                   # "" = bundled techrag/resources/domains.yaml
+
+llm:                                 # answering model (tool calling + vision capable)
+  base_url: http://localhost:8000/v1
+  # every endpoint also takes: timeout, verify_ssl, max_retries (HTTP 429/503, honours Retry-After), max_retry_wait
+  model: ""                          # pick from the server's /v1/models (Settings dialog shows a dropdown)
+  temperature: 0.1
+  max_tokens: 4096
+  thinking: on                       # on | auto: on for multi-part / comparison questions | off
+  thinking_control: chat_template    # chat_template (Qwen enable_thinking) | reasoning_effort | none
+  reasoning_effort: medium
+  tools: auto                        # vLLM: --enable-auto-tool-choice --tool-call-parser hermes
+  max_tool_rounds: 4
+  context_tokens: 16000              # curated source context; keep far below the model maximum
+
+llm_fast:                            # the fast chat model ("Hızlı"), chosen per question in the chat
+  base_url: ""                       # empty: the server of llm
+  model: ""                          # empty: no fast mode
+  thinking: on                       # on | auto | off
+  thinking_control: ""               # empty: as llm
+
+vision:                              # table extraction at ingestion + page images; empty = same as llm
+  enabled: true
+  base_url: ""
+  model: ""
+  dpi: 150
+  concurrency: 4
+  min_page_score: 4.0                # only table-like pages are sent to the VLM
+  max_pages_per_doc: 600
+
+embedding:
+  base_url: http://localhost:8001/v1 # vLLM --runner pooling (e.g. Qwen3-Embedding-0.6B)
+  model: ""
+  batch_size: 32
+  concurrency: 4
+  query_instruction: auto            # auto = derived from model name (Qwen3-Embedding instruct format)
+
+reranker:
+  enabled: true
+  base_url: http://localhost:8002/v1 # vLLM /v1/rerank (e.g. Qwen3-Reranker-0.6B, bge-reranker-v2-m3)
+  model: ""
+  template: auto                     # auto = Qwen3-Reranker yes/no prompt when the model name matches
+  candidates: 40
+
+retrieval:
+  final_top_k: 8
+  section_expand_tokens: 1800        # small-to-big: expand hits to their section up to this size
+  entity_filter: true                # hard filter on standards/versions named in the question (never widened)
+  clarify_ambiguous: true            # ask back when no standard is named and sibling versions' values may differ
+  domain_routing: true
+  query_rewrite: true
+  parameter_rows: 12
+
+answer:
+  verify: true                       # deterministic number/unit/citation check (off -> answers are "not checked")
+  judge: true                        # fresh-context entailment judge (off -> statements are "not checked")
+  regenerate: true                   # one correction pass for failing claims
+  failed_claims: strip               # strip | flag
+
+tls:                                 # HTTPS model endpoints (SSL: CERTIFICATE_VERIFY_FAILED -> see README)
+  system_store: true                 # trust the Windows certificate store (company CAs deployed by IT)
+  ca_bundle: ""                      # extra CA / server certificate files (PEM or DER), ';'-separated
+  use_system_proxy: false            # model servers are on the LAN; keep the corporate proxy out of the way
+
+# Per endpoint, as a last resort for test servers:  llm: { verify_ssl: false }
+
+server:
+  host: 127.0.0.1
+  port: 8765
+  api_token: ""
+
+ui:
+  language: tr                       # tr | en

@@ -1,0 +1,118 @@
+name: Build Windows exe
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Create a GitHub Release with this tag (e.g. v0.1.0); empty = build only"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -c packaging/constraints.txt -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -c packaging/constraints.txt -r requirements-desktop.txt -r requirements-dev.txt "pyinstaller>=6.10"
+      - name: Tests on Windows
+        run: python -m pytest -q
+      - name: Build (one folder)
+        run: pyinstaller packaging/techrag.spec --noconfirm
+      - name: Build (single portable exe)
+        env:
+          TECHRAG_ONEFILE: "1"
+        run: pyinstaller packaging/techrag.spec --noconfirm
+      - name: Self-test the frozen builds
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist/SayisalTasarimUzmani/SayisalTasarimUzmani.exe -ArgumentList "selftest","selftest-onedir.json" -Wait -PassThru
+          Get-Content selftest-onedir.json
+          if ($p.ExitCode -ne 0) { throw "onedir selftest failed" }
+          $p = Start-Process -FilePath dist/SayisalTasarimUzmani-portable.exe -ArgumentList "selftest","selftest-onefile.json" -Wait -PassThru
+          Get-Content selftest-onefile.json
+          if ($p.ExitCode -ne 0) { throw "onefile selftest failed" }
+          $j = Get-Content selftest-onedir.json | ConvertFrom-Json
+          if ($j.pywebview -ne $true) { throw "pywebview not bundled: $($j.pywebview)" }
+          foreach ($exe in @("dist/SayisalTasarimUzmani/SayisalTasarimUzmani.exe", "dist/SayisalTasarimUzmani-portable.exe")) {
+            $v = (Get-Item $exe).VersionInfo
+            Write-Host "$exe : $($v.FileDescription) / $($v.ProductName) $($v.ProductVersion)"
+            if ($v.ProductName -ne "Sayısal Tasarım Uzmanı") { throw "$exe has no product name in its version resource" }
+          }
+      - name: GUI smoke test (launcher icon -> chat window, both builds)
+        # techrag.desktop._smoke drives the real windows: the icon appears first and the chat window is hidden; a
+        # drag moves the icon without opening the chat; a click opens it (UI + bridge, no notes UI); a click hides it
+        # when it is in front and shows it again with the page kept; a minimized or covered chat is brought to the
+        # front instead; the close button only hides it; a click reopens it; a second start of the exe exits and
+        # hands over instead of starting a backend; the icon menu opens the settings; finally "Quit" in the icon
+        # menu must end the process by itself.
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:APPDATA "SayisalTasarimUzmani/SayisalTasarimUzmani.log"
+          foreach ($exe in @("dist/SayisalTasarimUzmani/SayisalTasarimUzmani.exe", "dist/SayisalTasarimUzmani-portable.exe")) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($exe)
+            $out = Join-Path $PWD "smoke-$name.json"
+            $env:TECHRAG_SMOKE = $out
+            Write-Host "=== $exe"
+            $p = Start-Process -FilePath $exe -PassThru
+            $null = $p.Handle  # keeps ExitCode available after the process ends
+            if (-not $p.WaitForExit(420000)) {
+              Stop-Process -Id $p.Id -Force
+              Get-Content $log -Tail 150 -ErrorAction SilentlyContinue
+              throw "$exe did not finish: a window hung, or 'Quit' in the launcher menu did not end the process"
+            }
+            Get-Content $log -Tail 60 -ErrorAction SilentlyContinue
+            if (-not (Test-Path $out)) { throw "$exe exited (code $($p.ExitCode)) without a smoke result - crashed" }
+            Get-Content $out
+            $j = Get-Content $out -Raw | ConvertFrom-Json
+            if (-not $j.ok) { throw "$exe GUI smoke test failed" }
+            if ($j.exit -ne "clean") { throw "$exe did not shut down cleanly after 'Quit'" }
+            if ($p.ExitCode -ne 0) { throw "$exe exit code $($p.ExitCode)" }
+            Start-Sleep -Seconds 2
+            if (Get-Process -Name $name -ErrorAction SilentlyContinue) { throw "$exe still running after 'Quit'" }
+          }
+          Remove-Item Env:TECHRAG_SMOKE
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path dist/SayisalTasarimUzmani -DestinationPath SayisalTasarimUzmani-win64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SayisalTasarimUzmani-windows
+          path: |
+            SayisalTasarimUzmani-win64.zip
+            dist/SayisalTasarimUzmani-portable.exe
+          retention-days: 30
+      - name: Publish GitHub Release (tag push or manual run with release_tag)
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: Sayısal Tasarım Uzmanı ${{ inputs.release_tag || github.ref_name }}
+          body_path: packaging/RELEASE_NOTES.md
+          files: |
+            SayisalTasarimUzmani-win64.zip
+            dist/SayisalTasarimUzmani-portable.exe

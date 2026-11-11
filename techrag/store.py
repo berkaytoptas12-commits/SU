@@ -1,0 +1,1395 @@
+"""Library index: one SQLite file with documents, chunks (+FTS5/BM25), embeddings, VLM-extracted tables and a
+typed parameter store (+FTS5).
+
+* Writable libraries use WAL on a local disk.
+* A shared library is opened read-only and immutable (no locks, safe on network shares).
+* ``publish`` writes a clean single-file copy (VACUUM INTO) plus the sources and VLM cache.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import sqlite3
+import threading
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterable, Iterator, Optional, Sequence
+
+import numpy as np
+
+SCHEMA_VERSION = "5"
+# Documents ingested with this format carry metadata["index_format"]; older ones lack page geometry and
+# cell-level table grounding (see Store.legacy_documents / `techrag migrate`).
+INDEX_FORMAT = 3
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS documents (
+    id INTEGER PRIMARY KEY,
+    path TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    n_pages INTEGER,
+    n_chunks INTEGER,
+    entities TEXT DEFAULT '[]',
+    doc_type TEXT DEFAULT 'base',
+    revision TEXT DEFAULT '',
+    doc_date TEXT DEFAULT '',
+    superseded_by INTEGER,
+    toc TEXT,
+    metadata TEXT,
+    warnings TEXT,
+    ingested_at TEXT,
+    root_id INTEGER,
+    rel_path TEXT DEFAULT '',
+    bucket TEXT DEFAULT '',
+    bucket_id TEXT DEFAULT '',
+    subpath TEXT DEFAULT '',
+    file_size INTEGER DEFAULT 0,
+    file_mtime INTEGER DEFAULT 0,
+    missing INTEGER DEFAULT 0,
+    ingest_fp TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS roots (
+    id INTEGER PRIMARY KEY,
+    path TEXT UNIQUE NOT NULL,
+    label TEXT DEFAULT '',
+    added_at TEXT,
+    last_scan TEXT DEFAULT '',
+    last_status TEXT DEFAULT '',
+    kind TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS chunks (
+    id INTEGER PRIMARY KEY,
+    doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    domain TEXT NOT NULL,
+    section TEXT,
+    page_start INTEGER,
+    page_end INTEGER,
+    kind TEXT,
+    overlap INTEGER DEFAULT 0,
+    text TEXT NOT NULL,
+    embedding BLOB,
+    evidence INTEGER DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id, ordinal);
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    text, section, title, tokenize = 'porter unicode61 remove_diacritics 2'
+);
+CREATE TABLE IF NOT EXISTS tables (
+    id INTEGER PRIMARY KEY,
+    doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    page INTEGER,
+    caption TEXT,
+    section TEXT,
+    markdown TEXT,
+    data TEXT,
+    source TEXT,
+    verified_ratio REAL,
+    status TEXT DEFAULT '',
+    grounding TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_tables_doc ON tables(doc_id, page);
+CREATE TABLE IF NOT EXISTS parameters (
+    id INTEGER PRIMARY KEY,
+    doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    table_id INTEGER REFERENCES tables(id) ON DELETE CASCADE,
+    domain TEXT,
+    page INTEGER,
+    section TEXT,
+    caption TEXT,
+    parameter TEXT,
+    symbol TEXT,
+    min TEXT, typ TEXT, max TEXT,
+    unit TEXT,
+    conditions TEXT,
+    notes TEXT,
+    min_si REAL, typ_si REAL, max_si REAL,
+    base_unit TEXT,
+    verified INTEGER DEFAULT 0,
+    status TEXT DEFAULT '',
+    evidence TEXT DEFAULT '',
+    value_kind TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_params_doc ON parameters(doc_id);
+CREATE TABLE IF NOT EXISTS pages (
+    doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    page INTEGER NOT NULL,
+    label TEXT DEFAULT '',
+    geom TEXT,
+    words BLOB,
+    PRIMARY KEY (doc_id, page)
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS params_fts USING fts5(
+    parameter, symbol, conditions, notes, caption, section, title,
+    tokenize = 'porter unicode61 remove_diacritics 2'
+);
+CREATE TABLE IF NOT EXISTS ingest_runs (
+    id INTEGER PRIMARY KEY,
+    kind TEXT,
+    started_at TEXT,
+    finished_at TEXT,
+    status TEXT,
+    summary TEXT
+);
+-- Documents removed from the index on request. Their files are not touched; a rescan skips them until they
+-- are restored. Key: the document's path in the index (root id + relative path for folder documents).
+CREATE TABLE IF NOT EXISTS excluded (
+    path TEXT PRIMARY KEY,
+    root_id INTEGER,
+    rel_path TEXT DEFAULT '',
+    title TEXT DEFAULT '',
+    bucket TEXT DEFAULT '',
+    removed_at TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS doc_quality (
+    path TEXT PRIMARY KEY,
+    run_id INTEGER,
+    status TEXT,
+    stage TEXT DEFAULT '',
+    processed_at TEXT,
+    last_ok_at TEXT DEFAULT '',
+    index_kept INTEGER DEFAULT 0,
+    needs_reprocess INTEGER DEFAULT 0,
+    data TEXT
+);
+"""
+
+_STOPWORDS = set("""
+a an and are as at be by can do does for from has have how i in is it its of on or shall should that the
+their there these this to was what when where which who why will with within without would you your
+acaba ama ancak bana bazı belirtilen ben bir biri birkaç bu buna bunda bunu bunun da daha de değil diye
+en gibi göre hangi hangisi hem için ile ise kaç kadar ki mi mı mu mü na nasıl ne neden nedir nelerdir
+nerede o olan olarak olur olursa on ona onu onun sadece şu şey ve veya ya yani yine çok açıkla anlat
+söyle ver verir midir mıdır olmalı olmalıdır gerekir lütfen
+""".split())
+
+
+@dataclass
+class ChunkRow:
+    id: int
+    doc_id: int
+    ordinal: int
+    domain: str
+    section: str
+    page_start: int
+    page_end: int
+    kind: str
+    overlap: int
+    text: str
+    doc_title: str = ""
+    doc_path: str = ""
+    evidence: bool = True     # False: search-only content (an unverified VLM table), never cited directly
+
+
+@dataclass
+class DocumentRow:
+    id: int
+    path: str
+    title: str
+    domain: str
+    sha256: str
+    n_pages: int
+    n_chunks: int
+    entities: list
+    doc_type: str
+    revision: str
+    doc_date: str
+    superseded_by: Optional[int]
+    toc: list
+    metadata: dict
+    warnings: list
+    ingested_at: str
+    root_id: Optional[int] = None     # None: a file inside the library's own sources folder
+    rel_path: str = ""                # path relative to its root (posix)
+    bucket: str = ""                  # display name of the top-level folder ("" = general bucket)
+    bucket_id: str = ""
+    subpath: str = ""                 # folder path inside the bucket
+    file_size: int = 0
+    file_mtime: int = 0
+    missing: bool = False             # source file not found at the last scan (excluded from answers)
+    ingest_fp: str = ""               # parsing/extraction settings fingerprint used to index it
+
+    def to_dict(self, with_toc: bool = False) -> dict:
+        d = asdict(self)
+        if not with_toc:
+            d.pop("toc")
+        d.update(doc_key=self.doc_key, version=self.version, part=self.part, legacy=self.legacy)
+        return d
+
+    @property
+    def doc_key(self) -> str:
+        return str(self.metadata.get("doc_key") or "")
+
+    @property
+    def version(self) -> str:
+        return str(self.metadata.get("version") or "")
+
+    @property
+    def part(self) -> str:
+        return str(self.metadata.get("part") or "")
+
+    @property
+    def legacy(self) -> bool:
+        """Indexed before page geometry / cell-level grounding existed: re-index for highlights."""
+        return int(self.metadata.get("index_format") or 0) < INDEX_FORMAT
+
+
+@dataclass
+class ParameterRow:
+    id: int
+    doc_id: int
+    table_id: Optional[int]
+    domain: str
+    page: int
+    section: str
+    caption: str
+    parameter: str
+    symbol: str
+    min: str
+    typ: str
+    max: str
+    unit: str
+    conditions: str
+    notes: str
+    verified: bool
+    doc_title: str = ""
+    status: str = ""
+    evidence: dict = field(default_factory=dict)
+    value_kind: str = ""
+
+    def line(self) -> str:
+        vals = " | ".join(f"{k}={v}" for k, v in (("min", self.min), ("typ", self.typ), ("max", self.max)) if v)
+        parts = [self.parameter + (f" ({self.symbol})" if self.symbol else ""), vals or "-", self.unit or ""]
+        if self.conditions:
+            parts.append(f"conditions: {self.conditions}")
+        notes = self.notes if (self.evidence or {}).get("notes_located", True) else ""
+        if notes:
+            parts.append(f"notes: {notes}")
+        for flag in (self.evidence or {}).get("flags", []):
+            parts.append(f"[{flag}]")
+        return " ; ".join(p for p in parts if p)
+
+
+@dataclass
+class TableRow:
+    id: int
+    doc_id: int
+    page: int
+    caption: str
+    section: str
+    markdown: str
+    source: str
+    verified_ratio: float
+    doc_title: str = ""
+    status: str = ""
+
+    @property
+    def grounded(self) -> bool:
+        return self.status == "grounded"
+
+
+def sqlite_ro_uri(path: Path) -> str:
+    r"""Read-only, lock-free SQLite URI for a local, drive-letter or UNC path.
+
+    Path.as_uri() turns a UNC share (\\server\share) into file://server/..., which SQLite rejects;
+    file:////server/share/... (empty authority) is the accepted form.
+    """
+    return uri_for_resolved(str(Path(path).resolve()))
+
+
+def uri_for_resolved(resolved: str) -> str:
+    from urllib.parse import quote
+
+    p = resolved.replace("\\", "/")
+    if not p.startswith("/"):
+        p = "/" + p  # C:/lib -> /C:/lib
+    return "file://" + quote(p, safe="/:") + "?mode=ro&immutable=1"
+
+
+def _lower(text: str) -> str:
+    """Lower-case for term matching. "İ".lower() is "i" + a combining dot, which splits a word ("İletişim" ->
+    "letişim"); the FTS index folds it to a plain "i"."""
+    return text.replace("İ", "i").lower()
+
+
+def fts_query(text: str, max_terms: int = 48) -> str:
+    """Free text -> safe FTS5 OR-query of quoted terms (stopwords and 1-char tokens dropped)."""
+    seen: list[str] = []
+    for tok in re.findall(r"\w+", _lower(text)):
+        if len(tok) < 2 or tok in _STOPWORDS or tok in seen:
+            continue
+        seen.append(tok)
+        if len(seen) >= max_terms:
+            break
+    return " OR ".join(f'"{t}"' for t in seen)
+
+
+class VectorIndex:
+    """The search vectors of a library, kept as the index stores them: 16-bit floats, half the memory of 32-bit
+    ones (a library of 50 000 passages with 4096-dimensional vectors: ~400 MB instead of ~800 MB). They are scored
+    in 32-bit, a block of rows at a time; 16 -> 32 bit is exact, so the scores are those of a 32-bit matrix."""
+
+    BLOCK = 1024   # rows converted at a time (1024 x 4096 dims: 16 MB of 32-bit floats)
+
+    def __init__(self, ids: np.ndarray, matrix: np.ndarray, domains: np.ndarray, doc_ids: np.ndarray):
+        self.ids, self.matrix, self.domains, self.doc_ids = ids, matrix, domains, doc_ids
+
+    @property
+    def size(self) -> int:
+        return len(self.ids)
+
+    def mask(self, domains: Optional[Sequence[str]], doc_ids: Optional[Sequence[int]]) -> Optional[np.ndarray]:
+        m = None
+        if domains:
+            m = np.isin(self.domains, list(domains))
+        if doc_ids is not None:
+            dm = np.isin(self.doc_ids, list(doc_ids))
+            m = dm if m is None else (m & dm)
+        return m
+
+    def scores(self, queries: np.ndarray) -> np.ndarray:
+        """Similarity of every vector to each query (queries x vectors), one pass over the matrix for all of
+        them: each block is converted to 32-bit once."""
+        qt = np.ascontiguousarray(np.atleast_2d(queries).astype(np.float32).T)
+        out = np.empty((self.size, qt.shape[1]), dtype=np.float32)
+        for start in range(0, self.size, self.BLOCK):
+            np.matmul(self.matrix[start:start + self.BLOCK].astype(np.float32), qt, out=out[start:start + self.BLOCK])
+        return out.T
+
+    def search(self, query: np.ndarray, k: int, mask: Optional[np.ndarray] = None) -> list[tuple[int, float]]:
+        return self.search_many(np.atleast_2d(query), k, mask)[0]
+
+    def search_many(self, queries: np.ndarray, k: int,
+                    mask: Optional[np.ndarray] = None) -> list[list[tuple[int, float]]]:
+        """The k nearest vectors to each query (one list per query)."""
+        queries = np.atleast_2d(queries)
+        if self.size == 0:
+            return [[] for _ in range(queries.shape[0])]
+        out = []
+        k = min(k, self.size)
+        for scores in self.scores(queries):
+            if mask is not None:
+                scores = np.where(mask, scores, -np.inf)
+            top = np.argpartition(-scores, k - 1)[:k]
+            top = top[np.argsort(-scores[top])]
+            out.append([(int(self.ids[i]), float(scores[i])) for i in top if np.isfinite(scores[i])])
+        return out
+
+
+class Store:
+    def __init__(self, db_path: str | Path, read_only: bool = False):
+        self.db_path = Path(db_path)
+        self.read_only = read_only
+        self._vectors: Optional[VectorIndex] = None
+        self._vectors_version: Optional[str] = None
+        self._lock = threading.Lock()
+        self._geom_cache: dict[tuple[int, int], object] = {}
+        if read_only:
+            if not self.db_path.exists():
+                raise FileNotFoundError(f"library index not found: {self.db_path}")
+        else:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.connect() as con:
+                con.execute("PRAGMA journal_mode=WAL")
+                self._migrate(con)
+                con.executescript(SCHEMA)
+                if not con.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone():
+                    con.execute("INSERT INTO meta VALUES('schema_version', ?)", (SCHEMA_VERSION,))
+                # a run still 'running' when the library is opened was cut off (the app was closed meanwhile)
+                con.execute("UPDATE ingest_runs SET status='interrupted' WHERE status='running'")
+                self._relink_published_quality(con)
+        with self.connect() as con:
+            self.columns = {t: {r[1] for r in con.execute(f"PRAGMA table_info({t})")}
+                            for t in ("chunks", "tables", "parameters", "pages", "documents", "roots", "excluded")}
+
+    @staticmethod
+    def _migrate(con: sqlite3.Connection) -> None:
+        """Bring an index from an older version up to the current schema, in place.
+
+        * new columns/tables are added (chunks.evidence, tables.status, parameters.status/evidence, pages);
+        * parameter rows that were "verified" by the old page-level number check are demoted to
+          'legacy_unchecked' (not citable) until the document is re-indexed with cell-level grounding;
+        * table chunks that came from old VLM tables become search-only, for the same reason.
+        Embeddings and chunk texts are untouched; page geometry is filled by `techrag migrate`.
+        """
+        have = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "chunks" not in have:
+            return  # new library
+        cols = {t: {r[1] for r in con.execute(f"PRAGMA table_info({t})")} for t in ("chunks", "tables", "parameters")}
+        if "evidence" not in cols["chunks"]:
+            con.execute("ALTER TABLE chunks ADD COLUMN evidence INTEGER DEFAULT 1")
+        for col in ("status", "grounding"):
+            if col not in cols["tables"]:
+                con.execute(f"ALTER TABLE tables ADD COLUMN {col} TEXT DEFAULT ''")
+        for col in ("status", "evidence", "value_kind"):
+            if col not in cols["parameters"]:
+                con.execute(f"ALTER TABLE parameters ADD COLUMN {col} TEXT DEFAULT ''")
+        if "roots" in have and "kind" not in {r[1] for r in con.execute("PRAGMA table_info(roots)")}:
+            con.execute("ALTER TABLE roots ADD COLUMN kind TEXT DEFAULT ''")   # '' = sub-folders are buckets
+        dcols = {r[1] for r in con.execute("PRAGMA table_info(documents)")}
+        for col, decl in (("root_id", "INTEGER"), ("rel_path", "TEXT DEFAULT ''"), ("bucket", "TEXT DEFAULT ''"),
+                          ("bucket_id", "TEXT DEFAULT ''"), ("subpath", "TEXT DEFAULT ''"),
+                          ("file_size", "INTEGER DEFAULT 0"), ("file_mtime", "INTEGER DEFAULT 0"),
+                          ("missing", "INTEGER DEFAULT 0"), ("ingest_fp", "TEXT DEFAULT ''")):
+            if col not in dcols:
+                con.execute(f"ALTER TABLE documents ADD COLUMN {col} {decl}")
+        # Buckets of documents in the library's own sources folder: their top-level folder (as before).
+        from techrag.ingest.sources import bucket_id_for, split_rel
+
+        for doc_id, path in con.execute("SELECT id, path FROM documents WHERE bucket_id = '' OR bucket_id IS NULL"
+                                        ).fetchall():
+            bucket, sub = split_rel(path)
+            con.execute("UPDATE documents SET rel_path=?, bucket=?, bucket_id=?, subpath=? WHERE id=?",
+                        (path, bucket, bucket_id_for(bucket), sub, doc_id))
+        legacy_tables = con.execute("SELECT id, doc_id, page, markdown FROM tables WHERE status = ''").fetchall()
+        for t in legacy_tables:
+            lines = [ln for ln in (t[3] or "").split("\n") if ln.startswith("|")]
+            if lines:
+                con.execute("UPDATE chunks SET evidence = 0 WHERE doc_id = ? AND kind = 'table' AND page_start = ?"
+                            " AND instr(text, ?) > 0", (t[1], t[2], lines[0]))
+        con.execute("UPDATE tables SET status = 'legacy_unchecked' WHERE status = ''")
+        con.execute("UPDATE parameters SET verified = 0, status = 'legacy_unchecked' WHERE status = ''")
+        con.execute("INSERT INTO meta(key, value) VALUES('schema_version', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (SCHEMA_VERSION,))
+
+    @contextmanager
+    def connect(self) -> Iterator[sqlite3.Connection]:
+        if self.read_only:
+            con = sqlite3.connect(sqlite_ro_uri(self.db_path), uri=True, timeout=60, check_same_thread=False)
+        else:
+            con = sqlite3.connect(str(self.db_path), timeout=60)
+            con.execute("PRAGMA foreign_keys=ON")
+        con.row_factory = sqlite3.Row
+        try:
+            yield con
+            if not self.read_only:
+                con.commit()
+        finally:
+            con.close()
+
+    def _writable(self) -> None:
+        if self.read_only:
+            raise PermissionError("this library is opened read-only")
+
+    # ------------------------------------------------------------------ meta
+    def get_meta(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        with self.connect() as con:
+            row = con.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_meta(self, key: str, value: str, con: Optional[sqlite3.Connection] = None) -> None:
+        self._writable()
+        sql = "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+        if con is not None:
+            con.execute(sql, (key, value))
+        else:
+            with self.connect() as c:
+                c.execute(sql, (key, value))
+
+    def _bump_version(self, con: sqlite3.Connection) -> None:
+        self.set_meta("index_version", datetime.now(timezone.utc).isoformat(timespec="microseconds"), con)
+
+    def check_embedding_model(self, name: str, dim: int) -> None:
+        stored, stored_dim = self.get_meta("embedding_model"), self.get_meta("embedding_dim")
+        if stored is None:
+            self.set_meta("embedding_model", name)
+            self.set_meta("embedding_dim", str(dim))
+            return
+        if stored != name or int(stored_dim or 0) != dim:
+            raise RuntimeError(
+                f"The library was indexed with embedding model '{stored}' (dim {stored_dim}) but the current "
+                f"settings use '{name}' (dim {dim}). Re-index with: techrag ingest --rebuild"
+            )
+
+    def reset(self, embedding_name: str, dim: int) -> None:
+        self._writable()
+        with self.connect() as con:
+            for t in ("params_fts", "parameters", "tables", "pages", "chunks_fts", "chunks", "documents",
+                      "doc_quality"):
+                con.execute(f"DELETE FROM {t}")
+            self.set_meta("embedding_model", embedding_name, con)
+            self.set_meta("embedding_dim", str(dim), con)
+            self._bump_version(con)
+
+    # ------------------------------------------------------------- documents
+    @staticmethod
+    def _doc(r: sqlite3.Row) -> DocumentRow:
+        return DocumentRow(
+            id=r["id"], path=r["path"], title=r["title"], domain=r["domain"], sha256=r["sha256"],
+            n_pages=r["n_pages"] or 0, n_chunks=r["n_chunks"] or 0, entities=json.loads(r["entities"] or "[]"),
+            doc_type=r["doc_type"] or "base", revision=r["revision"] or "", doc_date=r["doc_date"] or "",
+            superseded_by=r["superseded_by"], toc=json.loads(r["toc"] or "[]"),
+            metadata=json.loads(r["metadata"] or "{}"), warnings=json.loads(r["warnings"] or "[]"),
+            ingested_at=r["ingested_at"] or "",
+            **Store._doc_extra(r),
+        )
+
+    @staticmethod
+    def _doc_extra(r: sqlite3.Row) -> dict:
+        keys = r.keys()
+        if "bucket_id" not in keys:  # read-only index from an older version
+            from techrag.ingest.sources import bucket_id_for, split_rel
+
+            bucket, sub = split_rel(r["path"])
+            return {"rel_path": r["path"], "bucket": bucket, "bucket_id": bucket_id_for(bucket), "subpath": sub}
+        return {"root_id": r["root_id"], "rel_path": r["rel_path"] or r["path"], "bucket": r["bucket"] or "",
+                "bucket_id": r["bucket_id"] or "", "subpath": r["subpath"] or "", "file_size": r["file_size"] or 0,
+                "file_mtime": r["file_mtime"] or 0, "missing": bool(r["missing"]), "ingest_fp": r["ingest_fp"] or ""}
+
+    def documents(self) -> list[DocumentRow]:
+        with self.connect() as con:
+            order = "bucket, rel_path" if "bucket" in self.columns.get("documents", ()) else "domain, title"
+            rows = con.execute(f"SELECT * FROM documents ORDER BY {order}").fetchall()
+        return [self._doc(r) for r in rows]
+
+    def document(self, doc_id: int) -> Optional[DocumentRow]:
+        with self.connect() as con:
+            row = con.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
+        return self._doc(row) if row else None
+
+    def document_by_path(self, path: str) -> Optional[DocumentRow]:
+        with self.connect() as con:
+            row = con.execute("SELECT * FROM documents WHERE path=?", (path,)).fetchone()
+        return self._doc(row) if row else None
+
+    def delete_document(self, doc_id: int, con: Optional[sqlite3.Connection] = None) -> None:
+        self._writable()
+
+        def _delete(c: sqlite3.Connection):
+            c.execute("DELETE FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks WHERE doc_id=?)", (doc_id,))
+            c.execute("DELETE FROM params_fts WHERE rowid IN (SELECT id FROM parameters WHERE doc_id=?)", (doc_id,))
+            c.execute("DELETE FROM parameters WHERE doc_id=?", (doc_id,))
+            c.execute("DELETE FROM tables WHERE doc_id=?", (doc_id,))
+            c.execute("DELETE FROM pages WHERE doc_id=?", (doc_id,))
+            c.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
+            c.execute("UPDATE documents SET superseded_by=NULL WHERE superseded_by=?", (doc_id,))
+            if self._has_quality(c):
+                c.execute("DELETE FROM doc_quality WHERE path IN (SELECT path FROM documents WHERE id=?)", (doc_id,))
+            c.execute("DELETE FROM documents WHERE id=?", (doc_id,))
+            self._bump_version(c)
+
+        if con is not None:
+            _delete(con)
+        else:
+            with self.connect() as c:
+                _delete(c)
+        self._geom_cache.clear()   # its id may be given to the next document
+
+    def replace_document(self, *, path: str, title: str, domain: str, sha256: str, n_pages: int,
+                         toc: list, metadata: dict, warnings: list, chunks: Sequence[dict],
+                         embeddings: np.ndarray, entities: Sequence[str] = (), doc_type: str = "base",
+                         revision: str = "", doc_date: str = "", tables: Sequence[dict] = (),
+                         pages: Sequence[tuple] = (), source: Optional[dict] = None,
+                         quality: Optional[dict] = None) -> int:
+        """Atomically (re)write a document with chunks, FTS rows, embeddings, tables, parameters and page
+        geometry.
+
+        chunks: [{"ordinal", "section", "page_start", "page_end", "kind", "overlap", "text", "evidence"}]
+        tables: [{"page", "caption", "section", "markdown", "data", "source", "verified_ratio", "status",
+                  "grounding", "parameters": [{"parameter", "symbol", "min", "typ", "max", "unit", "conditions",
+                  "notes", "min_si", "typ_si", "max_si", "base_unit", "verified", "status", "evidence",
+                  "value_kind"}]}]
+        pages:  [(page, label, geom_json, words_blob)]
+        source: {"root_id", "rel_path", "bucket", "bucket_id", "subpath", "file_size", "file_mtime", "ingest_fp"}
+        quality: the indexing quality record of this processing (see set_quality), written in the same transaction
+        """
+        self._writable()
+        if len(chunks) != len(embeddings):
+            raise ValueError("chunks/embeddings length mismatch")
+        metadata = dict(metadata, index_format=INDEX_FORMAT)
+        with self.connect() as con:
+            old = con.execute("SELECT id FROM documents WHERE path=?", (path,)).fetchone()
+            if old:
+                self.delete_document(old["id"], con)
+            cur = con.execute(
+                "INSERT INTO documents(path, title, domain, sha256, n_pages, n_chunks, entities, doc_type, revision,"
+                " doc_date, toc, metadata, warnings, ingested_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (path, title, domain, sha256, n_pages, len(chunks), json.dumps(list(entities)), doc_type, revision,
+                 doc_date, json.dumps(toc, ensure_ascii=False), json.dumps(metadata, ensure_ascii=False, default=str),
+                 json.dumps(warnings, ensure_ascii=False), datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            )
+            doc_id = cur.lastrowid
+            self._set_source(con, doc_id, path, source)
+            emb16 = np.asarray(embeddings, dtype=np.float16)
+            for c, vec in zip(chunks, emb16):
+                cur = con.execute(
+                    "INSERT INTO chunks(doc_id, ordinal, domain, section, page_start, page_end, kind, overlap, text,"
+                    " embedding, evidence) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (doc_id, c["ordinal"], domain, c["section"], c["page_start"], c["page_end"], c["kind"],
+                     c.get("overlap", 0), c["text"], vec.tobytes(), 1 if c.get("evidence", True) else 0),
+                )
+                con.execute("INSERT INTO chunks_fts(rowid, text, section, title) VALUES(?,?,?,?)",
+                            (cur.lastrowid, c["text"], c["section"], title))
+            for t in tables:
+                cur = con.execute(
+                    "INSERT INTO tables(doc_id, page, caption, section, markdown, data, source, verified_ratio, status,"
+                    " grounding) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (doc_id, t["page"], t.get("caption", ""), t.get("section", ""), t.get("markdown", ""),
+                     json.dumps(t.get("data"), ensure_ascii=False), t.get("source", ""), t.get("verified_ratio"),
+                     t.get("status", ""), json.dumps(t.get("grounding") or {}, ensure_ascii=False)),
+                )
+                table_id = cur.lastrowid
+                for p in t.get("parameters", []):
+                    cur = con.execute(
+                        "INSERT INTO parameters(doc_id, table_id, domain, page, section, caption, parameter, symbol,"
+                        " min, typ, max, unit, conditions, notes, min_si, typ_si, max_si, base_unit, verified, status,"
+                        " evidence, value_kind) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (doc_id, table_id, domain, t["page"], t.get("section", ""), t.get("caption", ""),
+                         p.get("parameter", ""), p.get("symbol", ""), p.get("min", ""), p.get("typ", ""),
+                         p.get("max", ""), p.get("unit", ""), p.get("conditions", ""), p.get("notes", ""),
+                         p.get("min_si"), p.get("typ_si"), p.get("max_si"), p.get("base_unit", ""),
+                         1 if p.get("verified") else 0, p.get("status", "unchecked"),
+                         json.dumps(p.get("evidence") or {}, ensure_ascii=False), p.get("value_kind", "")),
+                    )
+                    con.execute(
+                        "INSERT INTO params_fts(rowid, parameter, symbol, conditions, notes, caption, section, title)"
+                        " VALUES(?,?,?,?,?,?,?,?)",
+                        (cur.lastrowid, p.get("parameter", ""), p.get("symbol", ""), p.get("conditions", ""),
+                         p.get("notes", ""), t.get("caption", ""), t.get("section", ""), title),
+                    )
+            for page, label, geom_json, blob in pages:
+                con.execute("INSERT INTO pages(doc_id, page, label, geom, words) VALUES(?,?,?,?,?)",
+                            (doc_id, page, label, geom_json, blob))
+            if quality is not None:
+                self._put_quality(con, path, quality)
+            self._bump_version(con)
+        self._geom_cache.clear()
+        return doc_id
+
+    # ------------------------------------------------------------ indexing quality
+    @staticmethod
+    def _relink_published_quality(con: sqlite3.Connection) -> int:
+        """A library published before 0.13.2 kept the quality records of folder documents under their old key
+        ("@<folder id>/<path>") while the documents got their path inside the package: the report then said
+        "no quality info" for every such document. The records are linked to their documents again - only when
+        it is certain: the record's folder no longer exists, exactly one record and exactly one document without
+        a record have that relative path, and the record's title (and page count) are the document's. Nothing is
+        deleted; a record that cannot be matched stays as it is."""
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='doc_quality'").fetchone():
+            return 0
+        doc_paths = {r[0] for r in con.execute("SELECT path FROM documents")}
+        orphans = [r for r in con.execute("SELECT path, data FROM doc_quality WHERE path LIKE '@%'").fetchall()
+                   if r[0] not in doc_paths]
+        if not orphans:
+            return 0
+        roots = {r[0] for r in con.execute("SELECT id FROM roots")}
+        by_rel: dict[str, list] = {}
+        for path, data in orphans:
+            m = re.match(r"@(\d+)/(.+)$", path)
+            if m and int(m.group(1)) not in roots:
+                by_rel.setdefault(m.group(2), []).append((path, data))
+        have = {r[0] for r in con.execute("SELECT path FROM doc_quality")}
+        free: dict[str, list] = {}
+        for path, rel, title, n_pages in con.execute(
+                "SELECT path, rel_path, title, n_pages FROM documents WHERE root_id IS NULL").fetchall():
+            if path not in have:
+                free.setdefault(rel or path, []).append((path, title, n_pages))
+        moved = 0
+        for rel, recs in by_rel.items():
+            cands = free.get(rel, [])
+            if len(recs) != 1 or len(cands) != 1:
+                continue
+            (old, data), (new, title, n_pages) = recs[0], cands[0]
+            try:
+                d = json.loads(data or "{}")
+            except ValueError:
+                continue
+            src_rel = (d.get("source") or {}).get("rel_path")
+            if d.get("title") != title or (src_rel and src_rel != rel) or \
+                    (d.get("n_pages") and n_pages and int(d["n_pages"]) != int(n_pages)):
+                continue
+            con.execute("UPDATE doc_quality SET path=? WHERE path=?", (new, old))
+            moved += 1
+        return moved
+
+    @staticmethod
+    def _has_quality(con: sqlite3.Connection) -> bool:
+        return con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='doc_quality'").fetchone() \
+            is not None
+
+    @staticmethod
+    def _put_quality(con: sqlite3.Connection, path: str, q: dict) -> None:
+        con.execute(
+            "INSERT INTO doc_quality(path, run_id, status, stage, processed_at, last_ok_at, index_kept, "
+            "needs_reprocess, data) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
+            "run_id=excluded.run_id, status=excluded.status, stage=excluded.stage, processed_at=excluded.processed_at,"
+            " last_ok_at=excluded.last_ok_at, index_kept=excluded.index_kept, needs_reprocess=excluded.needs_reprocess,"
+            " data=excluded.data",
+            (path, q.get("run_id"), q.get("status", ""), q.get("stage", ""),
+             q.get("processed_at") or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             q.get("last_ok_at", ""), 1 if q.get("index_kept") else 0, 1 if q.get("needs_reprocess") else 0,
+             json.dumps(q.get("data") or {}, ensure_ascii=False)))
+
+    def set_quality(self, path: str, quality: dict) -> None:
+        """The quality record of a processing that did not write the document (a failure): the document's index
+        rows - if any - are left exactly as they were."""
+        self._writable()
+        with self.connect() as con:
+            if self._has_quality(con):
+                self._put_quality(con, path, quality)
+
+    def quality(self) -> Optional[dict[str, dict]]:
+        """path -> quality record; None for an index without quality tables (an older, read-only library)."""
+        with self.connect() as con:
+            if not self._has_quality(con):
+                return None
+            rows = con.execute("SELECT * FROM doc_quality").fetchall()
+        out = {}
+        for r in rows:
+            d = dict(r)
+            try:
+                d["data"] = json.loads(d.get("data") or "{}")
+            except ValueError:
+                d["data"] = {}
+            d["index_kept"], d["needs_reprocess"] = bool(d["index_kept"]), bool(d["needs_reprocess"])
+            out[d["path"]] = d
+        return out
+
+    def start_ingest_run(self, kind: str) -> Optional[int]:
+        self._writable()
+        with self.connect() as con:
+            if not self._has_quality(con):
+                return None
+            cur = con.execute("INSERT INTO ingest_runs(kind, started_at, finished_at, status, summary) "
+                              "VALUES(?,?,'','running','{}')",
+                              (kind, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            con.execute("DELETE FROM ingest_runs WHERE id <= ?", (cur.lastrowid - 50,))  # the last 50 are kept
+            return cur.lastrowid
+
+    def finish_ingest_run(self, run_id: Optional[int], status: str, summary: dict) -> None:
+        if run_id is None:
+            return
+        self._writable()
+        with self.connect() as con:
+            con.execute("UPDATE ingest_runs SET finished_at=?, status=?, summary=? WHERE id=?",
+                        (datetime.now(timezone.utc).isoformat(timespec="seconds"), status,
+                         json.dumps(summary, ensure_ascii=False), run_id))
+
+    def ingest_runs(self, limit: int = 10) -> list[dict]:
+        with self.connect() as con:
+            if not self._has_quality(con):
+                return []
+            rows = con.execute("SELECT * FROM ingest_runs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["summary"] = json.loads(d.get("summary") or "{}")
+            except ValueError:
+                d["summary"] = {}
+            out.append(d)
+        return out
+
+    def chunk_embeddings(self, doc_id: int) -> dict[tuple, np.ndarray]:
+        """(section, kind, text) -> stored embedding of a document's chunks (re-processing reuses them for chunks
+        that did not change instead of embedding them again)."""
+        with self.connect() as con:
+            rows = con.execute("SELECT section, kind, text, embedding FROM chunks WHERE doc_id=?", (doc_id,)).fetchall()
+        return {(r["section"] or "", r["kind"] or "", r["text"]): np.frombuffer(r["embedding"], dtype=np.float16)
+                for r in rows if r["embedding"]}
+
+    _SOURCE_FIELDS = ("root_id", "rel_path", "bucket", "bucket_id", "subpath", "file_size", "file_mtime",
+                      "ingest_fp")
+
+    def _set_source(self, con: sqlite3.Connection, doc_id: int, path: str, source: Optional[dict]) -> None:
+        from techrag.ingest.sources import bucket_id_for, split_rel
+
+        src = dict(source or {})
+        if "bucket" not in src:
+            src["bucket"], src["subpath"] = split_rel(src.get("rel_path") or path)
+        src.setdefault("rel_path", path)
+        src.setdefault("bucket_id", bucket_id_for(src["bucket"]))
+        cols = [f for f in self._SOURCE_FIELDS if f in src]
+        con.execute(f"UPDATE documents SET {', '.join(f'{c}=?' for c in cols)}, missing=0 WHERE id=?",
+                    [src[c] for c in cols] + [doc_id])
+
+    # ----------------------------------------------------------- source folders
+    def roots(self) -> list[dict]:
+        if not self.columns.get("roots"):
+            return []
+        with self.connect() as con:
+            rows = con.execute("SELECT r.*, (SELECT COUNT(*) FROM documents d WHERE d.root_id = r.id) AS documents,"
+                               " (SELECT COUNT(*) FROM documents d WHERE d.root_id = r.id AND d.missing = 1)"
+                               " AS missing FROM roots r ORDER BY r.id").fetchall()
+        return [dict(r) for r in rows]
+
+    def root(self, root_id: int) -> Optional[dict]:
+        return next((r for r in self.roots() if r["id"] == root_id), None)
+
+    def add_root(self, path: str, label: str = "", kind: str = "") -> int:
+        """kind '' : the folders directly under it are the buckets; 'bucket': the whole folder is one bucket
+        (named after it), everything under it included."""
+        self._writable()
+        with self.connect() as con:
+            row = con.execute("SELECT id FROM roots WHERE path=?", (path,)).fetchone()
+            if row:
+                return row["id"]
+            cur = con.execute("INSERT INTO roots(path, label, added_at, kind) VALUES(?,?,?,?)",
+                              (path, label or Path(path).name, datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                               kind))
+            return cur.lastrowid
+
+    def remove_root(self, root_id: int) -> int:
+        """Take a document folder out of the index: its documents and the folder entry. The folder and its files
+        are not touched. Returns how many documents were removed."""
+        self._writable()
+        with self.connect() as con:
+            ids = [r[0] for r in con.execute("SELECT id FROM documents WHERE root_id=?", (root_id,))]
+            for i in ids:
+                self.delete_document(i, con)
+            if self.columns.get("excluded"):
+                con.execute("DELETE FROM excluded WHERE root_id=?", (root_id,))
+            con.execute("DELETE FROM roots WHERE id=?", (root_id,))
+            self._bump_version(con)
+        return len(ids)
+
+    # ------------------------------------------------------- removed documents
+    def exclude_document(self, doc_id: int) -> Optional[dict]:
+        """Remove a document from the index and keep it out of later rescans; its file is not touched.
+        Undone with restore_excluded (the next scan of its folder indexes it again)."""
+        self._writable()
+        with self.connect() as con:
+            r = con.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
+            if r is None:
+                return None
+            entry = {"path": r["path"], "root_id": r["root_id"], "rel_path": r["rel_path"] or r["path"],
+                     "title": r["title"], "bucket": r["bucket"],
+                     "removed_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+            con.execute("INSERT OR REPLACE INTO excluded(path, root_id, rel_path, title, bucket, removed_at) "
+                        "VALUES(:path, :root_id, :rel_path, :title, :bucket, :removed_at)", entry)
+            self.delete_document(doc_id, con)
+        return entry
+
+    def excluded(self) -> list[dict]:
+        if not self.columns.get("excluded"):
+            return []   # a library written by an older version
+        with self.connect() as con:
+            return [dict(r) for r in con.execute("SELECT * FROM excluded ORDER BY removed_at DESC")]
+
+    def excluded_rels(self, root_id: Optional[int]) -> set[str]:
+        """Relative paths a scan of this folder (None: the library's sources folder) leaves out."""
+        return {e["rel_path"] for e in self.excluded() if e["root_id"] == root_id}
+
+    def restore_excluded(self, path: str) -> Optional[dict]:
+        self._writable()
+        with self.connect() as con:
+            r = con.execute("SELECT * FROM excluded WHERE path=?", (path,)).fetchone()
+            if r is None:
+                return None
+            con.execute("DELETE FROM excluded WHERE path=?", (path,))
+        return dict(r)
+
+    def set_root_status(self, root_id: int, status: str) -> None:
+        self._writable()
+        with self.connect() as con:
+            con.execute("UPDATE roots SET last_scan=?, last_status=? WHERE id=?",
+                        (datetime.now(timezone.utc).isoformat(timespec="seconds"), status, root_id))
+
+    def root_documents(self, root_id: Optional[int]) -> list[DocumentRow]:
+        return [d for d in self.documents() if d.root_id == root_id]
+
+    def source_path(self, doc: DocumentRow, sources_dir: Path) -> Path:
+        """Where the document's file is read from (its picked folder, or the library's sources folder)."""
+        if doc.root_id is not None:
+            r = self.root(doc.root_id)
+            if r:
+                return Path(r["path"]) / Path(doc.rel_path)
+        p = Path(doc.path)
+        return p if p.is_absolute() else sources_dir / p
+
+    def set_missing(self, doc_ids: Iterable[int], missing: bool = True) -> None:
+        self._writable()
+        ids = list(doc_ids)
+        if not ids:
+            return
+        with self.connect() as con:
+            con.executemany("UPDATE documents SET missing=? WHERE id=?", [(1 if missing else 0, i) for i in ids])
+            self._bump_version(con)
+
+    def update_source(self, doc_id: int, **fields) -> None:
+        """Record a new location/stat for unchanged content (touched or moved file) - no re-processing."""
+        self._writable()
+        path = fields.pop("path", None)
+        with self.connect() as con:
+            if path is not None:
+                if self._has_quality(con):
+                    old = con.execute("SELECT path FROM documents WHERE id=?", (doc_id,)).fetchone()
+                    if old and old["path"] != path:
+                        con.execute("DELETE FROM doc_quality WHERE path=?", (path,))
+                        con.execute("UPDATE doc_quality SET path=? WHERE path=?", (path, old["path"]))
+                con.execute("UPDATE documents SET path=? WHERE id=?", (path, doc_id))
+            self._set_source(con, doc_id, path or "", fields)
+            self._bump_version(con)
+
+    def clone_document(self, src_id: int, path: str, source: dict) -> int:
+        """A second copy of an already indexed file (same content elsewhere): copy everything, no API calls."""
+        self._writable()
+        with self.connect() as con:
+            old = con.execute("SELECT id FROM documents WHERE path=?", (path,)).fetchone()
+            if old:
+                self.delete_document(old["id"], con)
+            cols = [r[1] for r in con.execute("PRAGMA table_info(documents)") if r[1] not in ("id", "path")]
+            cur = con.execute(f"INSERT INTO documents(path, {', '.join(cols)}) SELECT ?, {', '.join(cols)} "
+                              "FROM documents WHERE id=?", (path, src_id))
+            new = cur.lastrowid
+            con.execute("UPDATE documents SET superseded_by=NULL WHERE id=?", (new,))
+            self._set_source(con, new, path, source)
+            ccols = [r[1] for r in con.execute("PRAGMA table_info(chunks)") if r[1] not in ("id", "doc_id")]
+            for c in con.execute("SELECT * FROM chunks WHERE doc_id=? ORDER BY ordinal", (src_id,)).fetchall():
+                cur = con.execute(f"INSERT INTO chunks(doc_id, {', '.join(ccols)}) VALUES(?{', ?' * len(ccols)})",
+                                  [new] + [c[k] for k in ccols])
+                f = con.execute("SELECT text, section, title FROM chunks_fts WHERE rowid=?", (c["id"],)).fetchone()
+                if f:
+                    con.execute("INSERT INTO chunks_fts(rowid, text, section, title) VALUES(?,?,?,?)",
+                                (cur.lastrowid, f["text"], f["section"], f["title"]))
+            tcols = [r[1] for r in con.execute("PRAGMA table_info(tables)") if r[1] not in ("id", "doc_id")]
+            pcols = [r[1] for r in con.execute("PRAGMA table_info(parameters)")
+                     if r[1] not in ("id", "doc_id", "table_id")]
+            for t in con.execute("SELECT * FROM tables WHERE doc_id=?", (src_id,)).fetchall():
+                cur = con.execute(f"INSERT INTO tables(doc_id, {', '.join(tcols)}) VALUES(?{', ?' * len(tcols)})",
+                                  [new] + [t[k] for k in tcols])
+                tid = cur.lastrowid
+                for p in con.execute("SELECT * FROM parameters WHERE table_id=?", (t["id"],)).fetchall():
+                    cur = con.execute(f"INSERT INTO parameters(doc_id, table_id, {', '.join(pcols)}) "
+                                      f"VALUES(?, ?{', ?' * len(pcols)})", [new, tid] + [p[k] for k in pcols])
+                    f = con.execute("SELECT * FROM params_fts WHERE rowid=?", (p["id"],)).fetchone()
+                    if f:
+                        con.execute("INSERT INTO params_fts(rowid, parameter, symbol, conditions, notes, caption,"
+                                    " section, title) VALUES(?,?,?,?,?,?,?,?)",
+                                    (cur.lastrowid, f["parameter"], f["symbol"], f["conditions"], f["notes"],
+                                     f["caption"], f["section"], f["title"]))
+            con.execute("INSERT INTO pages(doc_id, page, label, geom, words) SELECT ?, page, label, geom, words "
+                        "FROM pages WHERE doc_id=?", (new, src_id))
+            if self._has_quality(con):  # same content, same processing result
+                con.execute("INSERT OR REPLACE INTO doc_quality(path, run_id, status, stage, processed_at, last_ok_at,"
+                            " index_kept, needs_reprocess, data) SELECT ?, run_id, status, stage, processed_at,"
+                            " last_ok_at, index_kept, needs_reprocess, data FROM doc_quality WHERE path ="
+                            " (SELECT path FROM documents WHERE id=?)", (path, src_id))
+            self._bump_version(con)
+        self._geom_cache.clear()
+        return new
+
+    def purge_missing(self) -> list[str]:
+        """Remove documents whose source file is gone (only on explicit request)."""
+        self._writable()
+        gone = [d for d in self.documents() if d.missing]
+        with self.connect() as con:
+            for d in gone:
+                self.delete_document(d.id, con)
+        return [d.path for d in gone]
+
+    def buckets(self) -> list[dict]:
+        out: dict[str, dict] = {}
+        for d in self.documents():
+            b = out.setdefault(d.bucket_id, {"id": d.bucket_id, "name": d.bucket, "documents": 0, "missing": 0,
+                                             "general": not d.bucket})
+            b["documents"] += 1
+            b["missing"] += int(d.missing)
+        return sorted(out.values(), key=lambda b: (b["general"], b["name"].lower()))
+
+    def set_pages(self, doc_id: int, pages: Sequence[tuple], metadata: Optional[dict] = None) -> None:
+        """Store page geometry for an already indexed document (migration of a legacy index)."""
+        self._writable()
+        with self.connect() as con:
+            con.execute("DELETE FROM pages WHERE doc_id=?", (doc_id,))
+            for page, label, geom_json, blob in pages:
+                con.execute("INSERT INTO pages(doc_id, page, label, geom, words) VALUES(?,?,?,?,?)",
+                            (doc_id, page, label, geom_json, blob))
+            if metadata is not None:
+                con.execute("UPDATE documents SET metadata=? WHERE id=?",
+                            (json.dumps(metadata, ensure_ascii=False, default=str), doc_id))
+            self._bump_version(con)
+        self._geom_cache.clear()
+
+    def update_grounding(self, tables: Sequence[tuple] = (), params: Sequence[tuple] = (),
+                         chunk_evidence: Sequence[tuple] = ()) -> None:
+        """Migration: write re-computed grounding results without touching texts or embeddings.
+        tables: (id, status, grounding_json, ratio); params: (id, verified, status, evidence_json, value_kind,
+        min_si, typ_si, max_si, base_unit); chunk_evidence: (chunk_id, 0|1)."""
+        self._writable()
+        with self.connect() as con:
+            con.executemany("UPDATE tables SET status=?, grounding=?, verified_ratio=? WHERE id=?",
+                            [(st, g, r, i) for i, st, g, r in tables])
+            con.executemany("UPDATE parameters SET verified=?, status=?, evidence=?, value_kind=?, min_si=?, typ_si=?,"
+                            " max_si=?, base_unit=? WHERE id=?",
+                            [(1 if v else 0, st, ev, vk, a, b, c, bu, i) for i, v, st, ev, vk, a, b, c, bu in params])
+            con.executemany("UPDATE chunks SET evidence=? WHERE id=?", [(e, i) for i, e in chunk_evidence])
+            self._bump_version(con)
+
+    def raw_tables(self, doc_id: int) -> list[sqlite3.Row]:
+        with self.connect() as con:
+            return con.execute("SELECT * FROM tables WHERE doc_id=?", (doc_id,)).fetchall()
+
+    def raw_parameters(self, table_id: int) -> list[sqlite3.Row]:
+        with self.connect() as con:
+            return con.execute("SELECT * FROM parameters WHERE table_id=?", (table_id,)).fetchall()
+
+    def table_chunks(self, doc_id: int, page: int) -> list[sqlite3.Row]:
+        with self.connect() as con:
+            return con.execute("SELECT id, text FROM chunks WHERE doc_id=? AND kind='table' AND page_start=?",
+                               (doc_id, page)).fetchall()
+
+    # ----------------------------------------------------------------- pages
+    @property
+    def has_geometry(self) -> bool:
+        return bool(self.columns.get("pages"))
+
+    def page_geom(self, doc_id: int, page: int):
+        """PageGeom of a page, or None (legacy index, non-PDF source or page out of range)."""
+        from techrag.geometry import PageGeom
+
+        if not self.has_geometry:
+            return None
+        key = (doc_id, page)
+        with self._lock:
+            if key in self._geom_cache:
+                return self._geom_cache[key]
+        with self.connect() as con:
+            row = con.execute("SELECT label, geom, words FROM pages WHERE doc_id=? AND page=?", (doc_id, page)).fetchone()
+        geom = PageGeom.decode(page, row["label"], row["geom"], row["words"]) if row else None
+        with self._lock:
+            if len(self._geom_cache) > 256:
+                self._geom_cache.clear()
+            self._geom_cache[key] = geom
+        return geom
+
+    def page_labels(self, doc_id: int) -> dict[int, str]:
+        if not self.has_geometry:
+            return {}
+        with self.connect() as con:
+            rows = con.execute("SELECT page, label FROM pages WHERE doc_id=? AND label != ''", (doc_id,)).fetchall()
+        return {r["page"]: r["label"] for r in rows}
+
+    def set_superseded(self, pairs: Iterable[tuple[int, Optional[int]]]) -> None:
+        self._writable()
+        with self.connect() as con:
+            for doc_id, newer in pairs:
+                con.execute("UPDATE documents SET superseded_by=? WHERE id=?", (newer, doc_id))
+            self._bump_version(con)
+
+    # ---------------------------------------------------------------- chunks
+    @property
+    def _CHUNK_SELECT(self) -> str:
+        ev = "c.evidence" if "evidence" in self.columns.get("chunks", ()) else "1"
+        return ("SELECT c.id, c.doc_id, c.ordinal, c.domain, c.section, c.page_start, c.page_end, c.kind, c.overlap,"
+                f" c.text, d.title AS doc_title, d.path AS doc_path, {ev} AS evidence"
+                " FROM chunks c JOIN documents d ON d.id = c.doc_id")
+
+    @staticmethod
+    def _chunk(r: sqlite3.Row) -> ChunkRow:
+        return ChunkRow(r["id"], r["doc_id"], r["ordinal"], r["domain"], r["section"] or "", r["page_start"],
+                        r["page_end"], r["kind"], r["overlap"] or 0, r["text"], r["doc_title"], r["doc_path"],
+                        bool(r["evidence"]))
+
+    def chunks_by_ids(self, ids: Iterable[int]) -> dict[int, ChunkRow]:
+        ids = list(dict.fromkeys(int(i) for i in ids))
+        out: dict[int, ChunkRow] = {}
+        with self.connect() as con:
+            for i in range(0, len(ids), 500):
+                part = ids[i:i + 500]
+                for r in con.execute(f"{self._CHUNK_SELECT} WHERE c.id IN ({','.join('?' * len(part))})", part):
+                    out[r["id"]] = self._chunk(r)
+        return out
+
+    def neighbors(self, doc_id: int, ordinal_from: int, ordinal_to: int) -> list[ChunkRow]:
+        with self.connect() as con:
+            rows = con.execute(
+                f"{self._CHUNK_SELECT} WHERE c.doc_id=? AND c.ordinal BETWEEN ? AND ? ORDER BY c.ordinal",
+                (doc_id, ordinal_from, ordinal_to)).fetchall()
+        return [self._chunk(r) for r in rows]
+
+    def section_chunks(self, doc_id: int, section: str, limit: int = 60) -> list[ChunkRow]:
+        with self.connect() as con:
+            rows = con.execute(
+                f"{self._CHUNK_SELECT} WHERE c.doc_id=? AND c.section=? ORDER BY c.ordinal LIMIT ?",
+                (doc_id, section, limit)).fetchall()
+        return [self._chunk(r) for r in rows]
+
+    def chunks_containing(self, doc_id: int, needle: str, limit: int = 40) -> list[ChunkRow]:
+        """Chunks of one document whose text contains `needle` (ASCII case-insensitive), in reading order."""
+        pattern = "%" + needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        with self.connect() as con:
+            rows = con.execute(
+                f"{self._CHUNK_SELECT} WHERE c.doc_id=? AND c.text LIKE ? ESCAPE '\\' ORDER BY c.ordinal LIMIT ?",
+                (doc_id, pattern, limit)).fetchall()
+        return [self._chunk(r) for r in rows]
+
+    def doc_sections(self, doc_id: int) -> list[str]:
+        """The section paths of one document, in reading order."""
+        with self.connect() as con:
+            rows = con.execute("SELECT section, MIN(ordinal) AS o FROM chunks WHERE doc_id=? GROUP BY section "
+                               "ORDER BY o", (doc_id,)).fetchall()
+        return [r["section"] or "" for r in rows]
+
+    def page_chunks(self, doc_id: int, page: int, evidence_only: bool = True) -> list[ChunkRow]:
+        with self.connect() as con:
+            rows = con.execute(
+                f"{self._CHUNK_SELECT} WHERE c.doc_id=? AND c.page_start<=? AND c.page_end>=? ORDER BY c.ordinal",
+                (doc_id, page, page)).fetchall()
+        return [c for c in (self._chunk(r) for r in rows) if c.evidence or not evidence_only]
+
+    # -------------------------------------------------------- tables / params
+    _PARAM_SELECT = ("SELECT p.*, d.title AS doc_title FROM parameters p JOIN documents d ON d.id = p.doc_id")
+
+    @staticmethod
+    def _param(r: sqlite3.Row) -> ParameterRow:
+        keys = r.keys()
+        status = (r["status"] if "status" in keys else "") or "legacy_unchecked"
+        try:
+            evidence = json.loads(r["evidence"]) if "evidence" in keys and r["evidence"] else {}
+        except ValueError:
+            evidence = {}
+        # Rows from an index without cell-level grounding are never treated as verified.
+        verified = bool(r["verified"]) and status == "grounded"
+        return ParameterRow(r["id"], r["doc_id"], r["table_id"], r["domain"] or "", r["page"] or 0,
+                            r["section"] or "", r["caption"] or "", r["parameter"] or "", r["symbol"] or "",
+                            r["min"] or "", r["typ"] or "", r["max"] or "", r["unit"] or "", r["conditions"] or "",
+                            r["notes"] or "", verified, r["doc_title"], status, evidence,
+                            (r["value_kind"] if "value_kind" in keys else "") or "")
+
+    def search_parameters(self, query: str, k: int, doc_ids: Optional[Sequence[int]] = None,
+                          domains: Optional[Sequence[str]] = None, verified_only: bool = False) -> list[ParameterRow]:
+        match = fts_query(query)
+        if not match:
+            return []
+        sql = (f"{self._PARAM_SELECT} JOIN params_fts f ON f.rowid = p.id WHERE params_fts MATCH ?")
+        params: list = [match]
+        if doc_ids is not None:
+            sql += f" AND p.doc_id IN ({','.join('?' * len(doc_ids)) or 'NULL'})"
+            params += list(doc_ids)
+        if domains:
+            sql += f" AND p.domain IN ({','.join('?' * len(domains))})"
+            params += list(domains)
+        if verified_only:
+            sql += " AND p.verified = 1" + (" AND p.status = 'grounded'" if "status" in self.columns["parameters"] else
+                                           " AND 0")
+        sql += " ORDER BY bm25(params_fts, 3.0, 3.0, 1.0, 0.5, 1.0, 0.5, 0.3) LIMIT ?"
+        params.append(k)
+        with self.connect() as con:
+            return [self._param(r) for r in con.execute(sql, params).fetchall()]
+
+    def parameters_by_ids(self, ids: Iterable[int]) -> list[ParameterRow]:
+        ids = list(ids)
+        if not ids:
+            return []
+        with self.connect() as con:
+            rows = con.execute(f"{self._PARAM_SELECT} WHERE p.id IN ({','.join('?' * len(ids))})", ids).fetchall()
+        return [self._param(r) for r in rows]
+
+    def tables_for(self, doc_id: Optional[int] = None, query: str = "", doc_ids: Optional[Sequence[int]] = None,
+                   limit: int = 5) -> list[TableRow]:
+        sql = ("SELECT t.*, d.title AS doc_title FROM tables t JOIN documents d ON d.id = t.doc_id WHERE 1=1")
+        params: list = []
+        if doc_id is not None:
+            sql += " AND t.doc_id=?"
+            params.append(doc_id)
+        if doc_ids is not None:
+            sql += f" AND t.doc_id IN ({','.join('?' * len(doc_ids)) or 'NULL'})"
+            params += list(doc_ids)
+        with self.connect() as con:
+            rows = con.execute(sql, params).fetchall()
+        out = [TableRow(r["id"], r["doc_id"], r["page"], r["caption"] or "", r["section"] or "",
+                        r["markdown"] or "", r["source"] or "", r["verified_ratio"] or 0.0, r["doc_title"],
+                        (r["status"] if "status" in r.keys() else "") or "legacy_unchecked")
+               for r in rows]
+        if query:
+            terms = [t for t in re.findall(r"\w+", _lower(query)) if t not in _STOPWORDS and len(t) > 1]
+            ref = re.search(r"\b(?:table|tablo)\s*([\w.\-]+)", query, re.I)
+
+            def score(t: TableRow) -> float:
+                cap = f"{t.caption} {t.section}".lower()
+                s = sum(2.0 for w in terms if w in cap) + sum(0.2 for w in terms if w in t.markdown.lower())
+                if ref and re.search(r"\b" + re.escape(ref.group(1).lower()) + r"\b", cap):
+                    s += 10
+                return s
+
+            out = sorted((t for t in out if score(t) > 0), key=score, reverse=True)
+        return out[:limit]
+
+    def doc_counts(self) -> dict[int, dict]:
+        """Per document: its tables read by the vision model (and how many of them match the PDF text cell by cell)
+        and its parameter rows (and how many are verified) - for the personal files' status panel."""
+        out: dict[int, dict] = {}
+        t_status = "status" in self.columns.get("tables", ())
+        p_status = "status" in self.columns.get("parameters", ())
+        with self.connect() as con:
+            grounded = "SUM(CASE WHEN status='grounded' THEN 1 ELSE 0 END)" if t_status else "0"
+            for r in con.execute(f"SELECT doc_id, COUNT(*) AS n, {grounded} AS g FROM tables GROUP BY doc_id"):
+                out.setdefault(r["doc_id"], {}).update(tables=r["n"], tables_grounded=r["g"] or 0)
+            ok = "SUM(CASE WHEN verified=1 AND status='grounded' THEN 1 ELSE 0 END)" if p_status else "0"
+            for r in con.execute(f"SELECT doc_id, COUNT(*) AS n, {ok} AS v FROM parameters GROUP BY doc_id"):
+                out.setdefault(r["doc_id"], {}).update(parameters=r["n"], parameters_verified=r["v"] or 0)
+        return out
+
+    # ----------------------------------------------------------------- stats
+    def stats(self) -> dict:
+        with self.connect() as con:
+            docs = con.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+            chunks = con.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            params = con.execute("SELECT COUNT(*) FROM parameters").fetchone()[0]
+            tables = con.execute("SELECT COUNT(*) FROM tables").fetchone()[0]
+            per = con.execute(
+                "SELECT d.domain, COUNT(*) AS docs, SUM(d.n_chunks) AS chunks FROM documents d GROUP BY d.domain"
+            ).fetchall()
+        return {
+            "documents": docs, "chunks": chunks, "tables": tables, "parameters": params,
+            "per_domain": {r["domain"]: {"documents": r["docs"], "chunks": r["chunks"] or 0} for r in per},
+            "embedding_model": self.get_meta("embedding_model"),
+            "embedding_dim": self.get_meta("embedding_dim"),
+            "index_version": self.get_meta("index_version"),
+            "read_only": self.read_only,
+            "verified_parameters": self._count_verified(),
+            "legacy_documents": len(self.legacy_documents()),
+        }
+
+    def _count_verified(self) -> int:
+        if "status" not in self.columns["parameters"]:
+            return 0
+        with self.connect() as con:
+            return con.execute("SELECT COUNT(*) FROM parameters WHERE verified=1 AND status='grounded'").fetchone()[0]
+
+    def legacy_documents(self) -> list[DocumentRow]:
+        """Documents indexed before page geometry / cell-level grounding (re-index or `techrag migrate`)."""
+        return [d for d in self.documents() if d.legacy]
+
+    # ---------------------------------------------------------------- search
+    def search_bm25(self, query: str, k: int, domains: Optional[Sequence[str]] = None,
+                    doc_ids: Optional[Sequence[int]] = None) -> list[tuple[int, float]]:
+        match = fts_query(query)
+        if not match:
+            return []
+        sql = ("SELECT c.id AS id, bm25(chunks_fts, 1.0, 0.6, 0.3) AS score FROM chunks_fts"
+               " JOIN chunks c ON c.id = chunks_fts.rowid WHERE chunks_fts MATCH ?")
+        params: list = [match]
+        if domains:
+            sql += f" AND c.domain IN ({','.join('?' * len(domains))})"
+            params += list(domains)
+        if doc_ids is not None:
+            sql += f" AND c.doc_id IN ({','.join('?' * len(doc_ids)) or 'NULL'})"
+            params += list(doc_ids)
+        sql += " ORDER BY score LIMIT ?"
+        params.append(k)
+        with self.connect() as con:
+            rows = con.execute(sql, params).fetchall()
+        return [(r["id"], -float(r["score"])) for r in rows]
+
+    def vectors(self) -> VectorIndex:
+        version = self.get_meta("index_version")
+        with self._lock:
+            if self._vectors is None or version != self._vectors_version:
+                # The previous set goes first: the old and the new vectors of a large library may not fit in memory
+                # together (a search already running keeps its own reference until it ends).
+                self._vectors = None
+                self._vectors_version = None
+                self._vectors = self._load_vectors()
+                self._vectors_version = version
+            return self._vectors
+
+    def _load_vectors(self) -> VectorIndex:
+        """The vectors read row by row straight into their matrix (16-bit, as stored): no list of every row in
+        memory beside it while loading."""
+        dim = int(self.get_meta("embedding_dim") or 0)
+        empty = VectorIndex(np.zeros(0, np.int64), np.zeros((0, max(dim, 1)), np.float16),
+                            np.zeros(0, object), np.zeros(0, np.int64))
+        if not dim:
+            return empty
+        with self.connect() as con:
+            con.execute("BEGIN")   # the count and the rows from one snapshot of the library
+            n = con.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            if not n:
+                return empty
+            matrix = np.empty((n, dim), dtype=np.float16)
+            ids = np.empty(n, dtype=np.int64)
+            doc_ids = np.empty(n, dtype=np.int64)
+            domains = np.empty(n, dtype=object)
+            i = 0
+            for cid, domain, doc_id, emb in con.execute(
+                    "SELECT id, domain, doc_id, embedding FROM chunks ORDER BY id"):
+                matrix[i] = np.frombuffer(emb, dtype=np.float16)
+                ids[i], domains[i], doc_ids[i] = cid, domain, doc_id
+                i += 1
+        if i < n:
+            matrix, ids, domains, doc_ids = matrix[:i], ids[:i], domains[:i], doc_ids[:i]
+        return VectorIndex(ids, matrix, domains, doc_ids)
+
+    def release_vectors(self) -> None:
+        """Let go of the vectors held for searching (another copy of the library answers from now on)."""
+        with self._lock:
+            self._vectors = None
+            self._vectors_version = None
+
+    # --------------------------------------------------------------- publish
+    def publish(self, dest_dir: str | Path, sources_dir: Path, vlm_cache_dir: Optional[Path] = None) -> Path:
+        """Write a self-contained copy of the library: clean index (VACUUM INTO) + sources + VLM cache.
+
+        Documents read from picked folders are copied into the package (sources/<their path below the folder>)
+        and the copied index points at those copies, so the package works on any machine. The original files
+        are only read. A summary is left in self.last_publish."""
+        dest = Path(dest_dir)
+        lib = self.db_path.parent.resolve()
+        d = dest.resolve()
+        if d == lib or lib in d.parents or d in lib.parents:
+            # Into the library itself the live index would be deleted first; inside it, copying its sources
+            # would copy into itself; around it, the package would overwrite the library's own files.
+            raise ValueError("publish to a folder outside the current library (not the library, a folder inside "
+                             "it or a folder containing it)")
+        dest.mkdir(parents=True, exist_ok=True)
+        target = dest / "index.sqlite"
+        if target.exists():
+            target.unlink()
+        with self.connect() as con:
+            con.execute("VACUUM INTO ?", (str(target),))
+        if sources_dir.exists():
+            shutil.copytree(sources_dir, dest / "sources", dirs_exist_ok=True)
+        report = {"copied": 0, "missing": []}
+        con = sqlite3.connect(str(target))  # `with` would only commit; Windows needs the handle closed
+        try:
+            con.execute("PRAGMA journal_mode=DELETE")
+            has_roots = bool(con.execute("SELECT name FROM sqlite_master WHERE name='roots'").fetchone())
+            has_quality = self._has_quality(con)
+            roots = dict(con.execute("SELECT id, path FROM roots").fetchall()) if has_roots else {}
+            used = {r[0] for r in con.execute("SELECT path FROM documents WHERE root_id IS NULL"
+                                              if has_roots else "SELECT path FROM documents")}
+            if has_quality:   # a file of the library's own sources that failed keeps its (failure) record
+                used |= {r[0] for r in con.execute("SELECT path FROM doc_quality WHERE path NOT LIKE '@%'")}
+            rows = con.execute("SELECT id, root_id, rel_path, path FROM documents WHERE root_id IS NOT NULL"
+                               ).fetchall() if has_roots else []
+            for doc_id, root_id, rel, old_path in rows:
+                src = Path(roots.get(root_id, "")) / rel
+                new = rel
+                n = 2
+                while new in used:
+                    stem = Path(rel)
+                    new = str(stem.with_name(f"{stem.stem} ({n}){stem.suffix}").as_posix())
+                    n += 1
+                used.add(new)
+                if not src.is_file():
+                    report["missing"].append(rel)
+                    con.execute("UPDATE documents SET missing=1 WHERE id=?", (doc_id,))
+                    continue
+                out = dest / "sources" / Path(new)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, out)
+                con.execute("UPDATE documents SET path=?, rel_path=?, root_id=NULL WHERE id=?", (new, new, doc_id))
+                if has_quality:   # the quality record follows its document (it is keyed by the document's path)
+                    con.execute("UPDATE doc_quality SET path=? WHERE path=?", (new, old_path))
+                report["copied"] += 1
+            if has_quality:
+                # failure-only records of folder files: those files are not in the package (nothing to retry there)
+                con.execute("DELETE FROM doc_quality WHERE path LIKE '@%' AND path NOT IN (SELECT path FROM documents)")
+            if has_roots:
+                con.execute("DELETE FROM roots")
+            con.commit()
+        finally:
+            con.close()
+        if vlm_cache_dir and vlm_cache_dir.exists():
+            shutil.copytree(vlm_cache_dir, dest / "cache" / "vlm", dirs_exist_ok=True)
+        self.last_publish = report
+        return target

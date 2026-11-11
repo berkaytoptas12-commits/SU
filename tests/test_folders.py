@@ -1,0 +1,473 @@
+"""Document folders: buckets, incremental rescans, missing/unreachable sources, rate limits, publishing.
+(Synthetic files and a fake model server; API cost is counted as requests to the fake server.)"""
+
+import json
+import os
+import shutil
+from pathlib import Path
+
+import pymupdf
+import pytest
+
+from conftest import make_standard_pdf
+from techrag.ingest.sources import GENERAL_BUCKET_ID, bucket_id_for, scan_root
+
+
+def simple_pdf(path: Path, *lines: str) -> Path:
+    doc = pymupdf.open()
+    page = doc.new_page()
+    y = 72
+    for line in lines:
+        page.insert_text((72, y), line, fontsize=11)
+        y += 20
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+@pytest.fixture()
+def tree(tmp_path) -> Path:
+    root = tmp_path / "Teknik Belgeler"
+    simple_pdf(root / "PCIe" / "Base_Specification.pdf", "PCI Express Base Specification 5.0",
+               "The LTSSM controls link training.")
+    simple_pdf(root / "PCIe" / "CEM.pdf", "PCI Express Card Electromechanical Specification 5.0", "REFCLK is 100 MHz.")
+    simple_pdf(root / "Ethernet" / "Standard.pdf", "IEEE 802.3 Ethernet", "The minimum frame size is 64 octets.")
+    simple_pdf(root / "Ethernet" / "Design_Guide.pdf", "Ethernet layout design guide", "Keep pairs matched.")
+    make_standard_pdf((root / "DDR" / "DDR4").joinpath("Specification.pdf").parent.mkdir(parents=True) or
+                      root / "DDR" / "DDR4" / "Specification.pdf", "DDR4", "350", "1.2", "C")
+    (root / "DDR" / "DDR5").mkdir(parents=True)
+    make_standard_pdf(root / "DDR" / "DDR5" / "Specification.pdf", "DDR5", "295", "1.1", "A")
+    (root / "Haberleşme Arayüzleri").mkdir()
+    (root / "Haberleşme Arayüzleri" / "Özel Not.md").write_text("# I2C Notları\n\nI2C Fast-mode 400 kbit/s destekler.\n",
+                                                               encoding="utf-8")
+    (root / "Genel Notlar.md").write_text("# Notlar\n\nBu klasör test belgelerini içerir.\n", encoding="utf-8")
+    (root / "Boş Klasör").mkdir()
+    (root / "PCIe" / "tablo.xlsx").write_bytes(b"PK\x03\x04 not a document")
+    (root / "DDR" / "resim.png").write_bytes(b"\x89PNG")
+    (root / "Ethernet" / "bozuk.pdf").write_bytes(b"%PDF-1.7 this is not really a pdf")
+    return root
+
+
+def _snapshot(root: Path) -> dict:
+    return {str(p.relative_to(root)): (p.stat().st_size, p.stat().st_mtime_ns) for p in root.rglob("*")}
+
+
+def _api_calls(fake) -> dict:
+    out = {"embeddings": 0, "chat": 0}
+    for c in fake.calls:
+        if c["path"].endswith("/embeddings"):
+            out["embeddings"] += 1
+        elif c["path"].endswith("/chat/completions"):
+            out["chat"] += 1
+    return out
+
+
+@pytest.fixture()
+def lib(cfg, registry, clients, fake):
+    from techrag.engine import RAGEngine
+    from techrag.ingest.pipeline import Ingestor
+    from techrag.store import Store
+
+    store = Store(cfg.db_path)
+
+    def ingestor(**kw):
+        return Ingestor(cfg, store, clients["embedder"], registry, llm=clients["llm"], vision=clients["vision"], **kw)
+
+    engine = RAGEngine(cfg, store=store, embedder=clients["embedder"], reranker=clients["reranker"],
+                       llm=clients["llm"], vision=clients["vision"], domains=registry)
+    return store, ingestor, engine
+
+
+def test_scan_buckets_nested_unicode_and_noise(tree):
+    if hasattr(os, "symlink"):
+        try:
+            os.symlink(tree, tree / "DDR" / "loop", target_is_directory=True)
+            os.symlink(Path(__file__), tree / "dışarı.pdf")
+        except OSError:
+            pass
+    scan = scan_root(tree)
+    b = {x["name"]: x for x in scan.buckets()}
+    assert set(b) == {"PCIe", "Ethernet", "DDR", "Haberleşme Arayüzleri", ""}
+    assert b["DDR"]["documents"] == 2 and b["DDR"]["folders"] == ["DDR4", "DDR5"]
+    assert b["Ethernet"]["documents"] == 3 and b[""]["general"] and b[""]["id"] == GENERAL_BUCKET_ID
+    assert b["Haberleşme Arayüzleri"]["id"] == bucket_id_for("Haberleşme Arayüzleri") != "haberlesme"
+    assert scan.unsupported_count == 2 and "Boş Klasör" in scan.empty_dirs
+    ddr5 = next(f for f in scan.files if f.rel == "DDR/DDR5/Specification.pdf")
+    assert (ddr5.bucket, ddr5.subpath) == ("DDR", "DDR5")
+    if (tree / "DDR" / "loop").is_symlink():
+        assert "DDR/loop" in scan.skipped_links and "dışarı.pdf" in scan.skipped_links
+        assert not any("loop" in f.rel for f in scan.files)
+    missing = scan_root(tree / "nope")
+    assert not missing.reachable and not missing.files
+
+
+def test_folder_is_indexed_in_place_with_buckets(tree, lib, fake):
+    store, ingestor, engine = lib
+    before = _snapshot(tree)
+    root_id = store.add_root(str(tree))
+    report = ingestor().sync_root(root_id)
+    assert _snapshot(tree) == before, "nothing written into, moved or renamed in the source folder"
+    assert set(report.failed) == {f"@{root_id}/Ethernet/bozuk.pdf"}, "one broken file does not stop the rest"
+    docs = {d.rel_path: d for d in store.documents()}
+    assert len(docs) == 8
+    d4, d5 = docs["DDR/DDR4/Specification.pdf"], docs["DDR/DDR5/Specification.pdf"]
+    assert d4.id != d5.id and (d5.bucket, d5.subpath) == ("DDR", "DDR5")
+    assert d4.entities == ["DDR4"] and d5.entities == ["DDR5"], "standard from the document, not the folder"
+    assert docs["Haberleşme Arayüzleri/Özel Not.md"].bucket == "Haberleşme Arayüzleri"
+    assert docs["Genel Notlar.md"].bucket == "" and docs["Genel Notlar.md"].bucket_id == GENERAL_BUCKET_ID
+    assert engine.document_path(d5.id) == tree / "DDR" / "DDR5" / "Specification.pdf"
+    assert engine.render_page(d5.id, 1)
+    buckets = {b["name"]: b for b in store.buckets()}
+    assert buckets["DDR"]["documents"] == 2 and buckets["PCIe"]["documents"] == 2
+
+
+def test_rescan_costs_nothing_for_unchanged_files(tree, lib, fake):
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    calls = _api_calls(fake)
+    os.utime(tree / "PCIe" / "CEM.pdf")  # touched, same content
+    report = ingestor().sync_all()
+    assert _api_calls(fake) == calls, "no VLM / LLM / embedding request for unchanged content"
+    assert not report.added and not report.updated and len(report.skipped) >= 7
+
+
+def test_new_changed_moved_missing_and_unreachable(tree, lib, fake):
+    store, ingestor, engine = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    # changed content, a new file, a moved file and a deleted file
+    make_standard_pdf(tree / "DDR" / "DDR4" / "Specification.pdf", "DDR4", "360", "1.2", "C")
+    simple_pdf(tree / "PCIe" / "Errata.pdf", "PCI Express Base 5.0 Errata", "Section 4.2 corrected.")
+    (tree / "Ethernet" / "Guides").mkdir()
+    shutil.move(tree / "Ethernet" / "Design_Guide.pdf", tree / "Ethernet" / "Guides" / "Design_Guide.pdf")
+    os.remove(tree / "DDR" / "DDR5" / "Specification.pdf")
+    emb = _api_calls(fake)["embeddings"]
+    report = ingestor().sync_root(root_id)
+    assert report.updated == [f"@{root_id}/DDR/DDR4/Specification.pdf"]
+    assert report.added == [f"@{root_id}/PCIe/Errata.pdf"]
+    assert report.reused == [f"@{root_id}/Ethernet/Guides/Design_Guide.pdf"]
+    assert report.missing == [f"@{root_id}/DDR/DDR5/Specification.pdf"]
+    assert _api_calls(fake)["embeddings"] - emb == 2, "only the changed and the new file are embedded"
+    d5 = next(d for d in store.documents() if d.rel_path == "DDR/DDR5/Specification.pdf")
+    assert d5.missing, "kept and reported, not silently deleted"
+    res = engine.retrieve("DDR5 tRFC refresh cycle time")
+    assert res.scope.reason == "entity_missing" and not res.passages, "stale content never answers"
+    # the share goes offline: nothing is declared missing
+    offline = tree.with_name("offline")
+    tree.rename(offline)
+    report = ingestor().sync_root(root_id)
+    assert not report.missing and len(report.unreachable) == len(store.root_documents(root_id))
+    assert sum(d.missing for d in store.documents()) == 1
+    offline.rename(tree)
+    # the deleted file comes back unchanged: restored without processing
+    make_standard_pdf(tree / "DDR" / "DDR5" / "Specification.pdf", "DDR5", "295", "1.1", "A")
+    report = ingestor().sync_root(root_id)
+    assert not any(d.missing for d in store.documents())
+    assert store.purge_missing() == []
+
+
+def test_unreadable_subfolder_is_not_treated_as_deleted(tree, lib, monkeypatch):
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    real = os.scandir
+
+    def scandir(path):
+        if str(path).endswith("PCIe"):
+            raise PermissionError("access denied")
+        return real(path)
+    monkeypatch.setattr(os, "scandir", scandir)
+    report = ingestor().sync_root(root_id)
+    assert not report.missing and {p.rsplit("/", 1)[-1] for p in report.unreachable} == {"Base_Specification.pdf", "CEM.pdf"}
+    assert not any(d.missing for d in store.documents())
+
+
+def test_settings_change_triggers_reprocessing_but_reuses_vlm_cache(cfg, tree, lib, fake):
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    vlm = sum(1 for c in fake.calls if "extract tables" in str(c["body"].get("messages", [{}])[0].get("content", "")))
+    emb = _api_calls(fake)["embeddings"]
+    cfg.chunking.target_tokens = 200
+    report = ingestor().sync_root(root_id)
+    assert len(report.updated) == 8, "every successfully indexed document is re-processed"
+    e = report.quality["embedding"]
+    assert e["reused"] > 0, "chunks whose text did not change keep their stored embedding"
+    assert _api_calls(fake)["embeddings"] - emb <= (1 if e["embedded"] else 0) * 8, "only changed chunks are embedded"
+    vlm2 = sum(1 for c in fake.calls if "extract tables" in str(c["body"].get("messages", [{}])[0].get("content", "")))
+    assert vlm2 == vlm, "table extraction results come from the cache"
+    assert not ingestor().sync_root(root_id).updated, "and only once"
+
+
+def test_rate_limits_are_honoured_and_bounded(tree, lib, fake, monkeypatch):
+    from techrag import api
+
+    waits = []
+    monkeypatch.setattr(api, "_sleep", waits.append)
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    fake.rate_limited, fake.retry_after = 2, "7"
+    report = ingestor().sync_root(root_id)
+    assert waits[:2] == [7.0, 7.0] and len(report.added) == 8
+    fake.rate_limited, fake.retry_after = 100, "1000"
+    make_standard_pdf(tree / "DDR" / "DDR4" / "Specification.pdf", "DDR4", "370", "1.2", "C")
+    waits.clear()
+    report = ingestor().sync_root(root_id)
+    assert len(waits) == 3 and max(waits) == 60.0, "at most max_retries waits, each capped"
+    assert list(report.failed) == [f"@{root_id}/DDR/DDR4/Specification.pdf"] or \
+        any("429" in v for v in report.failed.values())
+
+
+def test_bucket_selection_limits_search_and_keeps_standard_checks(tree, lib):
+    store, ingestor, engine = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    ddr, pcie = bucket_id_for("DDR"), bucket_id_for("PCIe")
+    res = engine.retrieve("refresh cycle time", buckets=[ddr])
+    assert res.passages and {p.doc_path.split("/")[1] for p in res.passages} == {"DDR"}
+    res = engine.retrieve("DDR5 tRFC refresh", buckets=[ddr])
+    assert res.scope.reason == "entity" and all(p.entities == ["DDR5"] for p in res.passages)
+    res = engine.retrieve("DDR5 tRFC refresh", buckets=[pcie])
+    assert res.scope.reason == "entity_missing" and not res.passages
+
+
+def test_same_file_twice_reuses_the_index(tree, lib, fake):
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    shutil.copy2(tree / "PCIe" / "CEM.pdf", tree / "Ethernet" / "CEM.pdf")
+    emb = _api_calls(fake)["embeddings"]
+    report = ingestor().sync_root(root_id)
+    assert report.reused == [f"@{root_id}/Ethernet/CEM.pdf"] and _api_calls(fake)["embeddings"] == emb
+    copy = next(d for d in store.documents() if d.rel_path == "Ethernet/CEM.pdf")
+    assert copy.bucket == "Ethernet" and copy.n_chunks > 0 and store.page_geom(copy.id, 1) is not None
+
+
+def test_publish_copies_folder_documents(tree, lib, cfg, tmp_path):
+    from techrag.store import Store
+
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    dest = tmp_path / "paylaşım"
+    store.publish(dest, cfg.sources_dir, cfg.vlm_cache_dir)
+    assert (dest / "sources" / "DDR" / "DDR5" / "Specification.pdf").exists()
+    assert (dest / "sources" / "Haberleşme Arayüzleri" / "Özel Not.md").exists()
+    ro = Store(dest / "index.sqlite", read_only=True)
+    assert ro.roots() == [] and all(d.root_id is None for d in ro.documents())
+    d5 = next(d for d in ro.documents() if d.rel_path == "DDR/DDR5/Specification.pdf")
+    assert ro.source_path(d5, dest / "sources").is_file() and d5.bucket == "DDR"
+    assert store.last_publish["copied"] == 8
+
+
+def test_publish_keeps_the_quality_report(tree, lib, cfg, tmp_path):
+    """The quality records of folder documents follow them into the package (they used to stay under the folder
+    key, and the published library's report said "no quality info" for every document)."""
+    from techrag.store import Store
+
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    live = store.quality()
+    assert f"@{root_id}/Ethernet/bozuk.pdf" in live and live[f"@{root_id}/Ethernet/bozuk.pdf"]["status"] == "failed"
+    status = {d.rel_path: live[d.path]["status"] for d in store.documents()}
+    assert len(status) == 8
+    dest = tmp_path / "paylaşım"
+    store.publish(dest, cfg.sources_dir, cfg.vlm_cache_dir)
+    ro = Store(dest / "index.sqlite", read_only=True)
+    q = ro.quality()
+    assert {d.rel_path: q[d.path]["status"] for d in ro.documents() if d.path in q} == status
+    assert not [p for p in q if p.startswith("@")], "the failed folder file is not in the package: no record"
+    assert store.quality() == live, "the library itself is untouched"
+
+
+def test_an_already_published_library_gets_its_quality_report_back(tree, lib, cfg, tmp_path):
+    """A package published by an older version: its records are linked to their documents when it is opened
+    writable - only where the match is certain; nothing is deleted."""
+    import sqlite3
+
+    from techrag.store import Store
+
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    live = store.quality()
+    dest = tmp_path / "eski-paket"
+    store.publish(dest, cfg.sources_dir, cfg.vlm_cache_dir)
+    db = dest / "index.sqlite"
+    con = sqlite3.connect(str(db))   # as an older version left it: records under the folder keys
+    for path in list(live):
+        rel = path.split("/", 1)[1]
+        con.execute("DELETE FROM doc_quality WHERE path=?", (rel,))
+        con.execute("INSERT OR REPLACE INTO doc_quality(path, run_id, status, stage, processed_at, last_ok_at, index_kept,"
+                    " needs_reprocess, data) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (path, live[path]["run_id"], live[path]["status"], live[path]["stage"],
+                     live[path]["processed_at"], live[path]["last_ok_at"], 0, 0,
+                     json.dumps(live[path]["data"], ensure_ascii=False)))
+    # one record whose title is not the document's: not linked (not certain)
+    con.execute("UPDATE doc_quality SET data=json_set(data, '$.title', 'başka belge') WHERE path=?",
+                (f"@{root_id}/PCIe/CEM.pdf",))
+    con.commit()
+    con.close()
+    before = Store(db, read_only=True)
+    assert not any(d.path in before.quality() for d in before.documents()), "the report said: no quality info"
+    n_records = len(before.quality())
+    opened = Store(db)               # the admin opens it writable
+    q = opened.quality()
+    linked = {d.rel_path for d in opened.documents() if d.path in q}
+    assert linked == {d.rel_path for d in opened.documents()} - {"PCIe/CEM.pdf"}
+    assert len(q) == n_records, "nothing deleted"
+    assert f"@{root_id}/PCIe/CEM.pdf" in q and f"@{root_id}/Ethernet/bozuk.pdf" in q
+    d5 = next(d for d in opened.documents() if d.rel_path == "DDR/DDR5/Specification.pdf")
+    assert q[d5.path]["data"] == live[f"@{root_id}/DDR/DDR5/Specification.pdf"]["data"]
+    assert Store(db).quality() == q, "opening again changes nothing"
+
+
+def test_v3_index_gets_buckets_on_open(cfg, sources, lib):
+    from techrag.store import Store
+
+    store, ingestor, _ = lib
+    ingestor().run()
+    with store.connect() as con:
+        for col in ("root_id", "rel_path", "bucket", "bucket_id", "subpath", "file_size", "file_mtime", "missing",
+                    "ingest_fp"):
+            con.execute(f"ALTER TABLE documents DROP COLUMN {col}")
+        con.execute("DROP TABLE roots")
+    ro = Store(cfg.db_path, read_only=True)
+    assert {d.bucket for d in ro.documents()} == {"ddr", "i2c"}
+    store = Store(cfg.db_path)
+    assert {d.bucket for d in store.documents()} == {"ddr", "i2c"} and store.roots() == []
+    report = ingestor().run()
+    assert not report.updated and not report.added, "documents from 0.2 are not re-processed"
+
+
+def test_library_sources_deleted_file_is_marked_not_deleted(cfg, sources, lib):
+    store, ingestor, _ = lib
+    ingestor().run()
+    os.remove(sources / "i2c" / "UM10204_i2c_notes.md")
+    report = ingestor().run()
+    assert report.missing == ["i2c/UM10204_i2c_notes.md"]
+    assert any(d.missing for d in store.documents()) and len(store.documents()) == 3
+    assert store.purge_missing() == ["i2c/UM10204_i2c_notes.md"] and len(store.documents()) == 2
+
+
+def test_standard_outside_the_selected_bucket_is_reported_as_such(tree, lib, fake):
+    store, ingestor, engine = lib
+    root_id = store.add_root(str(tree))
+    ingestor().sync_root(root_id)
+    fin = list(engine.ask_stream("DDR5 tRFC değeri nedir?", buckets=[bucket_id_for("PCIe")]))[-1]
+    assert "seçili kapsamda" in fin["answer"] and "Specification" in fin["answer"]
+    assert fin["verification"]["status"] == "not_found"
+
+
+def test_library_inside_the_picked_folder_is_skipped(tmp_path, cfg):
+    root = tmp_path / "Belgeler"
+    simple_pdf(root / "PCIe" / "Base.pdf", "PCI Express Base Specification 5.0")
+    lib = root / "TechRAG" / "library" / "sources" / "x"
+    simple_pdf(lib / "Copy.pdf", "copy inside the library")
+    scan = scan_root(root, exclude=(root / "TechRAG" / "library",))
+    assert [f.rel for f in scan.files] == ["PCIe/Base.pdf"]
+
+
+def test_full_exit_stops_indexing_at_a_document_boundary(tree, lib, fake):
+    """Quitting the desktop app during indexing: the document being written is completed, nothing is written after
+    it, and the next rescan picks up exactly the documents that were not indexed yet."""
+    import threading
+
+    from techrag.ingest.pipeline import IngestStopped, WriteGate
+
+    store, ingestor, _ = lib
+    root_id = store.add_root(str(tree))
+    gate = WriteGate()
+    written, closed, closers = [], {}, []
+    real = store.replace_document
+
+    def replace(**kw):  # runs inside gate.write(): the user quits while the 2nd document is being written
+        if len(written) == 1:
+            t = threading.Thread(target=lambda: closed.update(ok=gate.close(30)))
+            t.start()
+            closers.append(t)
+            assert gate.stop.wait(5)
+            assert "ok" not in closed, "the exit waits for the write in progress"
+        real(**kw)
+        written.append(kw["path"])
+
+    store.replace_document = replace
+    with pytest.raises(IngestStopped):
+        ingestor(gate=gate).sync_root(root_id)
+    store.replace_document = real
+    closers[0].join(10)
+    assert len(written) == 2 and closed.get("ok") is True
+    docs = {d.path: d for d in store.documents()}
+    assert set(docs) == set(written), "nothing written after the exit was requested"
+    assert all(store.page_chunks(d.id, 1, evidence_only=False) for d in docs.values()), "complete documents"
+    report = ingestor().sync_root(root_id)
+    assert set(report.skipped) >= set(written) and len(report.added) == 6, "the rescan resumes where it stopped"
+    assert len(store.documents()) == 8
+
+
+def test_copy_of_a_file_changed_in_the_same_rescan_keeps_its_own_content(tmp_path, lib):
+    store, ingestor, _ = lib
+    root = tmp_path / "Belgeler"
+    (root / "X").mkdir(parents=True)
+    (root / "X" / "b.md").write_text("# B\n\nOld revision: tRFC is 350 ns.\n", encoding="utf-8")
+    (root / "Z.md").write_text("# Z\n\nUnrelated.\n", encoding="utf-8")
+    root_id = store.add_root(str(root))
+    ingestor().sync_root(root_id)
+    (root / "X" / "Archive").mkdir()
+    shutil.copy2(root / "X" / "b.md", root / "X" / "Archive" / "b_old.md")   # keep the old revision
+    (root / "X" / "b.md").write_text("# B\n\nNew revision: tRFC is 295 ns.\n", encoding="utf-8")
+    report = ingestor().sync_root(root_id)
+    assert not report.failed
+    docs = {d.rel_path: d for d in store.documents()}
+    from techrag.ingest.pipeline import sha256_file
+
+    old, new = docs["X/Archive/b_old.md"], docs["X/b.md"]
+    assert old.sha256 == sha256_file(root / "X" / "Archive" / "b_old.md"), "the copy is indexed with ITS content"
+    assert new.sha256 == sha256_file(root / "X" / "b.md") and old.sha256 != new.sha256
+    texts = {d: " ".join(c.text for c in store.page_chunks(docs[d].id, 1, evidence_only=False)) for d in docs}
+    assert "350" in texts["X/Archive/b_old.md"] and "295" in texts["X/b.md"]
+
+
+def test_one_unreadable_file_does_not_stop_the_folder(tmp_path):
+    from techrag.ingest.sources import plan_changes
+
+    root = tmp_path / "R"
+    (root / "A").mkdir(parents=True)
+    for n in ("a.md", "b.md"):
+        (root / "A" / n).write_text(f"# {n}\n", encoding="utf-8")
+    scan = scan_root(root)
+
+    def hash_fn(path):
+        if path.endswith("a.md"):
+            raise PermissionError("locked")
+        return "h-" + Path(path).name
+
+    items = {it.rel: it for it in plan_changes(scan, [], "fp", 1, hash_fn)}
+    assert items["A/a.md"].action == "unreachable" and "PermissionError" in items["A/a.md"].reason
+    assert items["A/b.md"].action == "new"
+
+
+def test_unreadable_file_is_unreachable_not_missing(tmp_path):
+    from types import SimpleNamespace
+
+    from techrag.ingest.sources import ScanResult, plan_changes
+
+    scan = ScanResult(root=str(tmp_path), unreadable=["A/x.pdf"])
+    doc = SimpleNamespace(id=1, rel_path="A/x.pdf", bucket="A", bucket_id="a", sha256="s", missing=False,
+                          ingest_fp="", file_size=1, file_mtime=1)
+    assert [it.action for it in plan_changes(scan, [doc], "fp", 1)] == ["unreachable"]
+
+
+def test_revisions_written_differently_do_not_break_a_rescan():
+    from types import SimpleNamespace
+
+    from techrag.ingest.metadata import compute_supersedence
+
+    docs = [SimpleNamespace(id=i, doc_key="jesd79 4", path=f"d{i}.pdf", title="DDR4", doc_type="base", domain="ddr",
+                            entities=["DDR4"], version="", revision=rev, doc_date="") for i, rev in ((1, "C"), (2, "1.0"))]
+    assert dict(compute_supersedence(docs)) == {1: None, 2: None}, "cannot be ordered: no supersedence, no error"
+    docs[1].revision = "B"
+    assert dict(compute_supersedence(docs)) == {1: None, 2: 1}

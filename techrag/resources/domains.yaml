@@ -1,0 +1,424 @@
+# Koleksiyon (domain) tanımları.
+#  folders  : <kütüphane>/sources altında bu koleksiyona ait sayılan klasör adları
+#  patterns : soruda / dosya adında geçince bu koleksiyonu işaret eden regex'ler (büyük/küçük harf duyarsız)
+#  standards: koleksiyondaki standart/sürüm varlıkları (entity). Doküman bu kalıplarla etiketlenir; soruda
+#             açıkça geçen standart (ör. "DDR5", "PCIe Gen4") aramayı yalnızca o dokümanlara KESİN olarak daraltır.
+#  glossary : kısaltma -> açılım. Sorgu genişletmede ve LLM'e terminoloji ipucu olarak kullanılır.
+# Yeni bir standart ailesi eklemek için buraya bir blok ekleyip <kütüphane>/sources/<anahtar>/ klasörünü açmanız yeterli.
+
+domains:
+  arinc:
+    name: "ARINC (429 / 664-AFDX / 653 / 818 / 825 ...)"
+    folders: [arinc, arinc429, arinc664, arinc653, afdx]
+    patterns:
+      - '\barinc[\s-]?\d*'
+      - '\ba(429|453|575|615|629|653|664|708|717|739|818|825)\b'
+      - '\bafdx\b'
+      - '\bavionics full[- ]duplex'
+      - '\bapex\b'
+    standards:
+      - {id: "ARINC 429", patterns: ['\barinc[\s-]?429', '\ba429\b']}
+      - {id: "ARINC 664", patterns: ['\barinc[\s-]?664', '\ba664\b', '\bafdx\b', 'avionics full[- ]duplex']}
+      - {id: "ARINC 653", patterns: ['\barinc[\s-]?653', '\ba653\b']}
+      - {id: "ARINC 818", patterns: ['\barinc[\s-]?818', '\ba818\b']}
+      - {id: "ARINC 825", patterns: ['\barinc[\s-]?825', '\ba825\b']}
+      - {id: "ARINC 717", patterns: ['\barinc[\s-]?717', '\ba717\b']}
+    glossary:
+      AFDX: Avionics Full-Duplex Switched Ethernet
+      SSM: Sign/Status Matrix
+      SDI: Source/Destination Identifier
+      BNR: Binary Numeric Representation
+      BCD: Binary Coded Decimal
+      BAG: Bandwidth Allocation Gap
+      VL: Virtual Link
+      APEX: APplication EXecutive
+      IMA: Integrated Modular Avionics
+      LRU: Line Replaceable Unit
+      ES: End System
+
+  ddr:
+    name: "JEDEC DDR / LPDDR (DDR3, DDR4, DDR5, LPDDR4/5)"
+    folders: [ddr, ddr3, ddr4, ddr5, lpddr, jedec, dram, memory]
+    patterns:
+      - '\b(lp)?ddr\s?\d?x?\b'
+      - '\bjesd\s?\d+'
+      - '\bjedec\b'
+      - '\bs?dram\b'
+      - '\b(dimm|rdimm|udimm|lrdimm|sodimm)\b'
+      - '\bt(rfc|rcd|rp|ras|rc|faw|rrd|wr|wtr|ccd|refi|xs|dqss|dqsck)\b'
+    standards:
+      - {id: "DDR3", patterns: ['(?<![a-z])ddr3l?\b', 'jesd79[\s-]?3']}
+      - {id: "DDR4", patterns: ['(?<![a-z])ddr4\b', 'jesd79[\s-]?4']}
+      - {id: "DDR5", patterns: ['(?<![a-z])ddr5\b', 'jesd79[\s-]?5']}
+      - {id: "LPDDR4", patterns: ['\blpddr4x?\b', 'jesd209[\s-]?4']}
+      - {id: "LPDDR5", patterns: ['\blpddr5x?\b', 'jesd209[\s-]?5']}
+    glossary:
+      tRFC: Refresh Cycle Time
+      tREFI: Average Refresh Interval
+      tRCD: ACTIVATE to READ/WRITE delay
+      tRP: PRECHARGE command period
+      tRAS: ACTIVATE to PRECHARGE command period
+      tFAW: Four Activate Window
+      CL: CAS Latency
+      CWL: CAS Write Latency
+      ODT: On-Die Termination
+      ZQ: ZQ calibration
+      MRS: Mode Register Set
+      MR: Mode Register
+      DQS: Data Strobe
+      DM: Data Mask
+      DBI: Data Bus Inversion
+      ECC: Error Correction Code
+      PMIC: Power Management IC
+      SPD: Serial Presence Detect
+      BL: Burst Length
+      DFE: Decision Feedback Equalization
+
+  pcie:
+    name: "PCI Express (Base / CEM / M.2)"
+    folders: [pcie, pci_express, pci-express, pci]
+    patterns:
+      - '\bpci[\s-]?e\b'
+      - '\bpcie\b'
+      - '\bpci\s?express\b'
+      - '\bltssm\b'
+      - '\b(tlp|dllp)s?\b'
+      - '\b(\d+(\.\d+)?)\s?gt/s\b'
+    standards:
+      - {id: "PCIe 3.x", patterns: ['\bpci[\s_-]?e(?:xpress)?(?:[\s_-]+(?:base|specification|spec))*[\s_-]*(?:gen[\s-]*)?3(?:\.\d)?\b', 'pci express base specification[^\n]{0,30}revision\s*3\.\d']}
+      - {id: "PCIe 4.0", patterns: ['\bpci[\s_-]?e(?:xpress)?(?:[\s_-]+(?:base|specification|spec))*[\s_-]*(?:gen[\s-]*)?4(?:\.0)?\b', 'pci express base specification[^\n]{0,30}revision\s*4\.0']}
+      - {id: "PCIe 5.0", patterns: ['\bpci[\s_-]?e(?:xpress)?(?:[\s_-]+(?:base|specification|spec))*[\s_-]*(?:gen[\s-]*)?5(?:\.0)?\b', 'pci express base specification[^\n]{0,30}revision\s*5\.0']}
+      - {id: "PCIe 6.x", patterns: ['\bpci[\s_-]?e(?:xpress)?(?:[\s_-]+(?:base|specification|spec))*[\s_-]*(?:gen[\s-]*)?6(?:\.\d)?\b', 'pci express base specification[^\n]{0,30}revision\s*6\.\d']}
+      - {id: "PCIe CEM", patterns: ['\bcem\b', 'card electromechanical']}
+      - {id: "M.2", patterns: ['\bm\.2\b', 'ngff']}
+    glossary:
+      LTSSM: Link Training and Status State Machine
+      TLP: Transaction Layer Packet
+      DLLP: Data Link Layer Packet
+      ASPM: Active State Power Management
+      AER: Advanced Error Reporting
+      BAR: Base Address Register
+      MSI: Message Signaled Interrupt
+      LCRC: Link CRC
+      ECRC: End-to-end CRC
+      FLIT: Flow Control Unit
+      PAM4: 4-level Pulse Amplitude Modulation
+      CEM: Card Electromechanical
+      REFCLK: Reference Clock
+      SRIS: Separate Refclk Independent SSC
+      SSC: Spread Spectrum Clocking
+      EQ: Equalization
+      RC: Root Complex
+      EP: Endpoint
+
+  ethernet:
+    name: "Ethernet (IEEE 802.3, MII/RGMII/SGMII, TSN)"
+    folders: [ethernet, eth, ieee802.3, 802.3, ieee8023]
+    patterns:
+      - '\bethernet\b'
+      - '\b802\.3\w*'
+      - '\b802\.1\w*'
+      - '\b(10|100|1000|2\.5g|5g|10g|25g|40g|100g)base[-\s]?\w+'
+      - '\b(r|s|x|q|us|xg)?gmii\b'
+      - '\bmii\b'
+      - '\bmdio\b'
+      - '\bmac\s?(adres|address|layer|katman)'
+      - '\btsn\b'
+    standards:
+      - {id: "IEEE 802.3", patterns: ['\b(?:ieee\s*)?802\.3\w*']}
+      - {id: "IEEE 802.1 TSN", patterns: ['\b(?:ieee\s*)?802\.1\w*', '\btsn\b', 'time[- ]sensitive network']}
+      - {id: "RGMII", patterns: ['\brgmii\b']}
+      - {id: "SGMII", patterns: ['\b(?:q|s)gmii\b']}
+      - {id: "USXGMII", patterns: ['\busxgmii\b']}
+    glossary:
+      MII: Media Independent Interface
+      RGMII: Reduced Gigabit Media Independent Interface
+      SGMII: Serial Gigabit Media Independent Interface
+      MDIO: Management Data Input/Output
+      PCS: Physical Coding Sublayer
+      PMA: Physical Medium Attachment
+      PMD: Physical Medium Dependent
+      FCS: Frame Check Sequence
+      SFD: Start Frame Delimiter
+      IFG: Inter-Frame Gap
+      IPG: Inter-Packet Gap
+      MTU: Maximum Transmission Unit
+      PHY: Physical Layer device
+      TSN: Time-Sensitive Networking
+      PTP: Precision Time Protocol
+      VLAN: Virtual LAN
+      EEE: Energy Efficient Ethernet
+
+  displayport:
+    name: "VESA DisplayPort / eDP"
+    folders: [displayport, dp, edp, vesa]
+    patterns:
+      - '\bdisplay\s?port\b'
+      - '\be?dp\s?\d(\.\d+)?\b'
+      - '\bedp\b'
+      - '\bvesa\b'
+      - '\buhbr\s?\d*'
+      - '\bhbr\d?\b'
+      - '\baux\s?(ch|channel|kanal)'
+      - '\bdpcd\b'
+      - '\bmst\b'
+    standards:
+      - {id: "DisplayPort 1.2", patterns: ['\b(?:dp|displayport)\s*(?:v(?:ersion)?\s*)?1\.2a?\b']}
+      - {id: "DisplayPort 1.4", patterns: ['\b(?:dp|displayport)\s*(?:v(?:ersion)?\s*)?1\.4a?\b']}
+      - {id: "DisplayPort 2.x", patterns: ['\b(?:dp|displayport)\s*(?:v(?:ersion)?\s*)?2\.\d\b', '\buhbr\s?\d']}
+      - {id: "eDP", patterns: ['\bedp\b', 'embedded displayport']}
+    glossary:
+      DPCD: DisplayPort Configuration Data
+      HBR: High Bit Rate
+      UHBR: Ultra High Bit Rate
+      MST: Multi-Stream Transport
+      SST: Single-Stream Transport
+      HPD: Hot Plug Detect
+      AUX: Auxiliary Channel
+      DSC: Display Stream Compression
+      FEC: Forward Error Correction
+      eDP: embedded DisplayPort
+      LTTPR: Link-Training Tunable PHY Repeater
+      SDP: Secondary Data Packet
+      MSA: Main Stream Attribute
+
+  usb:
+    name: "USB (2.0 / 3.x / USB4 / Type-C / Power Delivery)"
+    folders: [usb, usb2, usb3, usb4, typec, type-c, usbpd]
+    patterns:
+      - '\busb\s?\d?(\.\d)?'
+      - '\btype[\s-]?c\b'
+      - '\bvbus\b'
+      - '\bpower delivery\b'
+      - '\busb[\s-]?pd\b'
+      - '\bsuperspeed\b'
+      - '\bhigh[\s-]speed usb'
+      - '\b(cc1|cc2|vconn)\b'
+    standards:
+      - {id: "USB 2.0", patterns: ['\busb\s*2(?:\.0)?\b', 'universal serial bus specification[^\n]{0,30}revision\s*2\.0']}
+      - {id: "USB 3.x", patterns: ['\busb\s*3(?:\.\d)?\b', '\bsuperspeed\b']}
+      - {id: "USB4", patterns: ['\busb\s*4\b']}
+      - {id: "USB Type-C", patterns: ['\btype[\s-]?c\b']}
+      - {id: "USB PD", patterns: ['\bpower delivery\b', '\busb[\s-]?pd\b']}
+    glossary:
+      PD: Power Delivery
+      CC: Configuration Channel
+      VBUS: USB bus power
+      VCONN: Type-C connector power for cables
+      PDO: Power Data Object
+      EPR: Extended Power Range
+      SPR: Standard Power Range
+      LFPS: Low Frequency Periodic Signaling
+      SOF: Start of Frame
+      OTG: On-The-Go
+      DRD: Dual-Role Data
+      DRP: Dual-Role Power
+      xHCI: eXtensible Host Controller Interface
+      HS: High-Speed (480 Mb/s)
+      FS: Full-Speed (12 Mb/s)
+      LS: Low-Speed (1.5 Mb/s)
+
+  rs422:
+    name: "RS-422 / RS-485 (TIA/EIA-422, TIA/EIA-485)"
+    folders: [rs422, rs-422, rs485, rs-485, tia422, eia422, serial]
+    patterns:
+      - '\brs[\s-]?4(22|23|85)\b'
+      - '\b(tia|eia)[\s/-]*(eia[\s-]*)?4(22|23|85)'
+      - '\bv\.11\b'
+    standards:
+      - {id: "TIA-422", patterns: ['\brs[\s-]?422\b', '\b(?:tia|eia)[\s/-]*(?:eia[\s-]*)?422', '\bv\.11\b']}
+      - {id: "TIA-485", patterns: ['\brs[\s-]?485\b', '\b(?:tia|eia)[\s/-]*(?:eia[\s-]*)?485']}
+    glossary:
+      RS-422: TIA/EIA-422 balanced (differential) voltage digital interface
+      RS-485: TIA/EIA-485 multipoint differential interface
+      UL: Unit Load
+      VOD: Differential Output Voltage
+      VCM: Common-Mode Voltage
+      Rt: Termination resistor
+
+  i2c:
+    name: "I2C / SMBus / I3C"
+    folders: [i2c, iic, smbus, i3c]
+    patterns:
+      - '\bi\s?2\s?c\b'
+      - '\bi²c\b'
+      - '\biic\b'
+      - '\bsmbus\b'
+      - '\bi3c\b'
+      - '\b(sda|scl)\b'
+    standards:
+      - {id: "I2C", patterns: ['\bi\s?2\s?c\b', '\bi²c\b', '\bum10204\b']}
+      - {id: "SMBus", patterns: ['\bsmbus\b']}
+      - {id: "I3C", patterns: ['\bi3c\b']}
+    glossary:
+      SDA: Serial Data line
+      SCL: Serial Clock line
+      ACK: Acknowledge
+      NACK: Not Acknowledge
+      Fm: Fast-mode (400 kbit/s)
+      Fm+: Fast-mode Plus (1 Mbit/s)
+      Hs: High-speed mode (3.4 Mbit/s)
+      UFm: Ultra Fast-mode (5 Mbit/s)
+      Sr: Repeated START
+      Cb: bus capacitance
+
+  general:
+    name: "Genel tasarım standartları (DO-254, DO-160, DO-178C, MIL-STD, IPC, IEC ...)"
+    folders: [general, genel, design, tasarim, misc]
+    patterns:
+      - '\bdo[\s-]?(160|178|254|297)\w*'
+      - '\bmil[\s-]?std[\s-]?\d+'
+      - '\bmil[\s-]?hdbk[\s-]?\d+'
+      - '\bipc[\s-]?\d{3,4}\w*'
+      - '\biec[\s-]?\d{4,5}'
+      - '\barp[\s-]?47\d{2}'
+      - '\bdal\b'
+    standards:
+      - {id: "DO-254", patterns: ['\bdo[\s-]?254']}
+      - {id: "DO-160", patterns: ['\bdo[\s-]?160']}
+      - {id: "DO-178C", patterns: ['\bdo[\s-]?178']}
+      - {id: "MIL-STD-461", patterns: ['\bmil[\s-]?std[\s-]?461']}
+      - {id: "MIL-STD-704", patterns: ['\bmil[\s-]?std[\s-]?704']}
+      - {id: "MIL-STD-1553", patterns: ['\bmil[\s-]?std[\s-]?1553', '\b1553b?\b']}
+      - {id: "IPC-2221", patterns: ['\bipc[\s-]?2221']}
+      - {id: "IPC-2152", patterns: ['\bipc[\s-]?2152']}
+      - {id: "IPC-A-610", patterns: ['\bipc[\s-]?a[\s-]?610']}
+    glossary:
+      DAL: Design Assurance Level
+      EMI: Electromagnetic Interference
+      EMC: Electromagnetic Compatibility
+      ESD: Electrostatic Discharge
+      MTBF: Mean Time Between Failures
+      FMEA: Failure Modes and Effects Analysis
+      SI: Signal Integrity
+      PI: Power Integrity
+      PDN: Power Distribution Network
+
+# Türkçe -> İngilizce terim eşlemesi (anahtar kelime aramasını Türkçe sorularda güçlendirir).
+# Anahtarlar kök halinde yazılır; ek almış halleri ("gerilimi", "zamanlamaları") de eşleşir.
+# Türkçe karakter yazılmadan yazılan sorular ("hiz", "gerilim") için eşleşme ASCII'ye katlanarak yapılır.
+term_map:
+  zamanlama: timing
+  gecikme: latency delay
+  gerilim: voltage
+  voltaj: voltage
+  akım: current
+  güç: power
+  frekans: frequency
+  saat: clock
+  hız: speed rate
+  veri hızı: data rate
+  bant genişliği: bandwidth
+  empedans: impedance
+  sonlandırma: termination
+  direnç: resistor resistance
+  kapasitans: capacitance
+  kapasite: capacitance
+  kablo: cable
+  uzunluk: length
+  mesafe: distance length
+  konnektör: connector
+  bağlayıcı: connector
+  pin: pin
+  bacak: pin
+  sinyal: signal
+  diferansiyel: differential
+  ortak mod: common-mode
+  gürültü: noise
+  yükselme süresi: rise time
+  düşme süresi: fall time
+  kurulum süresi: setup time
+  tutma süresi: hold time
+  çerçeve: frame
+  paket: packet
+  kelime: word
+  etiket: label
+  adres: address
+  kayıt: register
+  yazmaç: register
+  bit: bit
+  bayt: byte
+  eşlik: parity
+  hata: error
+  hata düzeltme: error correction
+  kodlama: encoding
+  kod çözme: decoding
+  şerit: lane
+  bağlantı: link
+  eğitim: training
+  eşitleme: equalization
+  durum makinesi: state machine
+  durum: state status
+  yenileme: refresh
+  başlatma: initialization
+  sıfırlama: reset
+  güç yönetimi: power management
+  uyku: sleep suspend
+  bekleme: idle standby
+  besleme: supply
+  topraklama: ground grounding
+  ekranlama: shielding
+  yalıtım: isolation
+  sıcaklık: temperature
+  titreşim: vibration
+  sertifikasyon: certification
+  doğrulama: verification validation
+  gereksinim: requirement
+  maksimum: maximum
+  minimum: minimum
+  en fazla: maximum
+  en az: minimum
+  değer: value
+  aralık: range interval
+  süre: duration time period
+  periyot: period
+  tolerans: tolerance
+  kenar: edge
+  yükselen: rising
+  düşen: falling
+  alıcı: receiver
+  verici: transmitter driver
+  sürücü: driver
+  ana cihaz: master controller host
+  köle: slave target
+  hedef: target
+  denetleyici: controller
+  yol: bus path
+  veri yolu: bus
+  kanal: channel
+  bölüm: partition section
+  bölümleme: partitioning
+  zaman dilimi: time window slot
+  sanal bağlantı: virtual link
+  yedekli: redundant
+  yedeklilik: redundancy
+  bellek: memory
+  modül: module
+  sayfa: page
+  satır: row
+  sütun: column
+  okuma: read
+  yazma: write
+  komut: command
+  gecikme süresi: latency
+  çözünürlük: resolution
+  renk derinliği: color depth bpp
+  sıkıştırma: compression
+  sıcak takma: hot plug
+  şarj: charging
+  akım sınırı: current limit
+  yük: load
+  birim yük: unit load
+  çekme direnci: pull-up resistor
+  yukarı çekme: pull-up
+  ön ek: preamble
+  önsöz: preamble
+  kontrol toplamı: checksum CRC
+  boyut: size length
+  seviye: level
+  katman: layer
+  oran: rate ratio
+  mod: mode
+  çalışma: operation
+  sayı: number count
+  genişlik: width
