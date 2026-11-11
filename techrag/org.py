@@ -146,7 +146,9 @@ def _clean(data: Any) -> dict:
             out["paths"] = paths
     if isinstance(data.get("read_only"), bool):
         out["read_only"] = data["read_only"]
-    return out
+    from techrag.config import upgrade_timeouts
+
+    return upgrade_timeouts(out)   # an organization file exported by 0.1.0 says timeout: 300
 
 
 def load(user: dict) -> dict:
