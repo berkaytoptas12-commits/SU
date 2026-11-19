@@ -144,7 +144,12 @@ anahtar yoktur), **sohbet modelleri** (Kapsamlı ve Hızlı, aşağıda) ve **bi
 reranker sunucuları, cevaplama,
 gelişmiş ayarlar ve bağlantı güvenliği **Admin › Ayarlar** sekmesindedir (aşağıdaki maddeler orada). Her servis için
 yalnızca **API adresi** (`http://sunucu:8000/v1`) ve **Model** girilir. Eski bir sürümde servis başına girilmiş
-anahtarlar ilk kayıtta ortak anahtara taşınır (sohbet modelininki esas alınır; şifreli hâliyle taşınır). Model listesi sunucunun `/v1/models` ucundan **otomatik çekilir** ve açılır listede gösterilir;
+anahtarlar ilk kayıtta ortak anahtara taşınır (sohbet modelininki esas alınır; şifreli hâliyle taşınır).
+Anahtar varken alan **kilitlidir (🔒)**: kazayla değiştirilmesin diye maskeli ve salt okunur durur; kilide tıklayan
+herkes açıp (🔓) yeni anahtarı yazabilir, kaydedince alan yeniden kilitlenir. Alanın altında anahtarın nereden
+geldiği yazar: **kurum ayarlarından** ya da **bu bilgisayarda değiştirildi** (bu durumda **Kurum anahtarına dön**
+bağlantısı çıkar). Kullanıcının değiştirdiği anahtar yalnızca kendi bilgisayarında geçerlidir; alanı boşaltıp kaydetmek
+de kurum anahtarına döner. Model listesi sunucunun `/v1/models` ucundan **otomatik çekilir** ve açılır listede gösterilir;
 **Test et** düğmesi bağlantıyı ve modeli dener (embedding boyutu, rerank skoru, LLM cevabı).
 
 * **İki sohbet modeli: Kapsamlı ve Hızlı.** Ayarlar'da **Sohbet modeli — Kapsamlı** (önceki "sohbet modeli") ve
@@ -239,14 +244,19 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
 2. **Admin › Ayarlar › Kurum ayarları**: klasörü seçin (ör. ortak kütüphane klasörü) ve **Kurum ayarlarını
    kaydet**. Klasöre `SurecUzmani.kurum-ayarlari.yaml` yazılır: model sunucuları ve modeller, düşünme/araç/cevaplama ve gelişmiş
    ayarlar, bağlantı güvenliği, ortak kütüphane klasörü (ve **diğer kullanıcıların onu salt-okunur açması**,
-   varsayılan işaretli), kullanım günlüğü klasörü. **API anahtarı ve kişisel klasörler yazılmaz.** Dosya yarım
-   kalmayacak şekilde yazılır; o klasöre yazma izniniz olmalıdır.
+   varsayılan işaretli), kullanım günlüğü klasörü ve **"Ortak API anahtarını da kurum ayarlarına yaz"** işaretliyse
+   (varsayılan işaretli) **ortak API anahtarı**. Anahtar dosyaya **düz metin** olarak yazılır: klasörü okuyabilen
+   herkes görebilir, bu yüzden klasörün okuma iznini yalnızca uygulamayı kullanacak kişilere açın. **Kişisel klasörler
+   yazılmaz.** Dosya yarım kalmayacak şekilde yazılır; o klasöre yazma izniniz olmalıdır.
 3. Aynı anda exe'nin yanına bu klasörü gösteren `SurecUzmani.kurum.txt` bırakılır. Exe'yi dağıtırken bu
    dosyayı da verin: zip sürümünde klasörün içinde kalır; portable exe'yi bu dosyayla aynı klasörde verin; exe ağ
    klasöründen çalıştırılıyorsa bir şey yapmanız gerekmez. Exe'nin klasörüne yazılamıyorsa uygulama dosyanın adını
    ve içine yazılacak satırı söyler.
-4. Diğer kullanıcının uygulaması açılışta ayarları bu klasörden okur; ilk açılışta yalnızca **API anahtarı** sorulur
-   (Ayarlar penceresi kendiliğinden açılır). Anahtar o kullanıcıya şifreli kaydedilir.
+4. Diğer kullanıcının uygulaması açılışta ayarları bu klasörden okur. Kurum dosyasında ortak API anahtarı varsa
+   kullanıcı hiçbir şey girmeden başlar; yoksa ilk açılışta yalnızca **API anahtarı** sorulur (Ayarlar penceresi
+   kendiliğinden açılır) ve o kullanıcıya şifreli kaydedilir. Kurum anahtarı kullanıcının ayar dosyasına hiçbir zaman
+   yazılmaz (sonradan değişip değişmediğini anlamak için yalnızca geri çevrilemez bir parmak izi tutulur); klasöre
+   ulaşılamayan günler için bilgisayarda tutulan kurum ayarları kopyasında da anahtar şifrelidir.
 
 * **Kurum ayarları varsayılandır, kilit yoktur:** kullanıcı bir ayarı değiştirirse onun değeri geçerlidir. Kullanıcının
   kendi dosyasına yalnızca kurum ayarından farklı olan değerler yazılır; böylece kurum dosyasını sonradan
@@ -261,10 +271,12 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
   dosya tarihlerine bakılır: kullanıcının ayar dosyası kurum dosyasının son kaydından **önce** yazıldıysa kurum değeri
   geçer (ör. sonradan kütüphaneyi taşıdığınız bir iş arkadaşı); **sonra** yazıldıysa kullanıcının değeri kalır (ör.
   yöneticinin kendi bilgisayarı: "Kurum ayarlarını kaydet" ayar dosyasını hemen ardından yazar). Bu karşılaştırma
-  yalnızca bir kez, yeni sürümün ilk açılışında yapılır. **API anahtarı, kişisel klasör, dil ve kullanıcının ortak
-  kütüphaneyi salt-okunur açıp açmadığı** her zaman kullanıcıda kalır.
+  yalnızca bir kez, yeni sürümün ilk açılışında yapılır. **Kişisel klasör, dil ve kullanıcının ortak kütüphaneyi
+  salt-okunur açıp açmadığı** her zaman kullanıcıda kalır. **Ortak API anahtarı** da diğer ayarlar gibidir: kullanıcının
+  kendi bilgisayarında değiştirdiği anahtar geçerli kalır; siz kurum anahtarını sonradan değiştirirseniz yeni anahtar
+  herkese geçer.
 * Yerine kurum değeri geçen kişisel değerler silinmez: kullanıcının `settings.json` dosyasında `_org_replaced` altında
-  saklanır ve uygulanmaz. **Admin › Ayarlar**'daki kurum ayarları satırı o açılışta hangi ayarların değiştiğini söyler.
+  saklanır ve uygulanmaz (API anahtarı hariç: onun yalnızca değiştirildiği ve ne zaman değiştirildiği tutulur). **Admin › Ayarlar**'daki kurum ayarları satırı o açılışta hangi ayarların değiştiğini söyler.
 * **Yeni ayarlar uygulama yeniden başlayınca okunur.** Sohbet penceresinin ✕ düğmesi uygulamadan çıkmaz, exe'ye yeniden
   çift tıklamak da çalışan uygulamayı öne getirir; tam çıkış: simgeye sağ tık → **Uygulamadan çık**.
 * **Bulunma sırası:** `SURECUZMANI_ORG_SETTINGS` ortam değişkeni (BT grup ilkesiyle verebilir; klasör veya dosya yolu) →
@@ -308,8 +320,8 @@ Belgeler (PDF'ler) ağda kalır; bir sayfa yalnızca görüntülenirken okunur.
   4096 boyut: ~400 MB; önceden 32 bite çevrilip ~800 MB) ve yükleme anında ayrıca bütün satırların bir listesi
   tutulmaz. Benzerlik 32 bitle, bloklar hâlinde hesaplanır; 16→32 bit çevirme kayıpsız olduğu için bulunan kaynaklar
   ve sıraları aynıdır. Bedeli: soru başına birkaç yüz milisaniye hesaplama.
-* Elle düzenlenmiş bir kurum dosyası API anahtarı, sunucu erişim anahtarı veya kişisel klasör yolu **koyamaz**; bu
-  alanlar okunurken atılır.
+* Elle düzenlenmiş bir kurum dosyası yalnızca **ortak API anahtarını** (`auth: api_key`) koyabilir; servis başına
+  anahtar, sunucu erişim anahtarı veya kişisel klasör yolu **koyamaz**, bu alanlar okunurken atılır.
 
 ---
 
@@ -527,12 +539,16 @@ her şey burada toplanır):
   metni) ve **Aranan belgeler** (araç çağrıları ve modele verilen kaynaklar, atıf yapılanlar işaretli).
 * **Değerlendirme:** soru setlerini çalıştırma ve raporlar (bkz. 5).
 * **Kullanım günlüğü:** her soru, soranın **Windows kullanıcı adı** ve bilgisayar adıyla, sorunun kendisi, sonucu,
-  süresi ve token sayılarıyla (istem, üretilen, düşünme, toplam, model çağrısı sayısı; sunucu bildirmiyorsa tahmini
-  olduğu belirtilir) seçilen klasörde **kullanıcı başına bir CSV dosyasına** (`<kullanıcı>.csv`; UTF-8, `;` ayraçlı,
-  Excel'de doğrudan açılır) eklenir. **Cevap metni yazılmaz.** Klasör bir ağ klasörü olabilir: her bilgisayar yalnızca
+  süresi, **toplam token** (modellerin o soru için ürettiği metin, düşünme dahil; cevabın altındaki **Süre** dökümündeki
+  "Toplam" ile aynı sayı) ve model çağrısı sayısıyla (sunucu token bildirmiyorsa tahmini olduğu belirtilir) seçilen
+  klasörde **kullanıcı başına bir CSV dosyasına** (`<kullanıcı>.csv`; UTF-8, `;` ayraçlı, Excel'de doğrudan açılır)
+  eklenir. 0.1.0'ın yazdığı bir dosya (istem, üretilen ve düşünme token sütunlarıyla) o kullanıcının bir sonraki
+  sorusunda bir kez yeni biçime çevrilir: önce aynı klasöre `<kullanıcı>.csv.yedek` kopyası bırakılır, eski satırların
+  toplamı yeni ölçüye (üretilen token) çevrilir. Dosya o sırada Excel'de açıksa çevirme sonraki soruya kalır; satır
+  dosyanın eski biçiminde eklenir, sütunlar kaymaz. **Cevap metni yazılmaz.** Klasör bir ağ klasörü olabilir: her bilgisayar yalnızca
   kendi kullanıcısının dosyasına ekleme yaptığı için kullanıcılar birbirinin dosyasına yazmaz. Klasöre
   yazılamazsa (ağ kapalı) kayıt yerel ayarlar klasörüne (`usage_local`) yazılır ve Admin'de uyarı görünür.
-  Sekmede kullanıcı başına soru ve token toplamları özetlenir. Varsayılan klasör `%APPDATA%\SurecUzmani\usage`;
+  Sekmede kullanıcı başına soru sayısı, toplam token ve **soru başına ortalama** özetlenir. Varsayılan klasör `%APPDATA%\SurecUzmani\usage`;
   günlük kapatılabilir.
 
 ---
@@ -572,7 +588,9 @@ her şey burada toplanır):
 
 * **Durdur:** model çalışırken gönder düğmesinin yerinde kırmızı **Durdur** düğmesi ve geçen süre görünür.
   Durdur, modele giden isteği de keser (sunucu o cevap için üretmeyi bırakır); yarım taslak doğrulanmadığı için
-  cevap olarak gösterilmez. "Yeni sohbet" de süren cevabı aynı şekilde durdurur.
+  cevap olarak gösterilmez. Sunucu henüz hiçbir şey göndermiyorken de (yoğun sunucuda kuyruk, uzun istemin okunması)
+  hemen durur: bağlantı kesilir, sunucunun bir şey göndermesi beklenmez. "Yeni sohbet" de süren cevabı aynı şekilde
+  durdurur.
 * **Bildirim:** pencere küçültülmüş, gizli veya başka pencerelerin arkasındayken cevap (ya da netleştirme
   sorusu) hazır olunca Windows bildirimi çıkar; tıklayınca sohbet açılır. Küçültülmüş pencerenin görev çubuğu
   düğmesi de yanıp söner. Pencere öndeyken bildirim çıkmaz. Ayarlar'dan kapatılabilir.
@@ -777,7 +795,7 @@ doğrulama, hücre eşleştirme, konum, geçiş) sınar, gerçek bir modelin do�
 | Soru yanlış standarda gidiyor / "yüklü değil" | `SurecUzmani.exe docs` ile doküman etiketlerini kontrol edin; etiketsiz dokümanlar adı geçen standarda dahil edilmez. Dosya adına standart/sürüm yazın veya `domains.yaml` desenlerini genişletin |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | Aşağıdaki "HTTPS sertifika hataları" bölümü |
 | Cevap yerine "yeterli boş bellek yok" | Kütüphanenin arama verisi belleğe sığmadı (ör. ~52 bin parça: ~400 MB). Açık programları kapatıp yeniden sorun; sürerse uygulamadan çıkıp yeniden açın. "Teknik ayrıntı"da asıl hata yazar. |
-| Cevap yerine "model sunucusuna bağlanılamadı" / "zamanında cevap vermedi" / "isteği reddetti" | Sırasıyla: ağ ve Ayarlar'daki sunucu adresi; sunucunun yoğunluğu; API anahtarı. Embedding ve reranker isteklerinde anlık bir bağlantı kopması (bağlantı reddedildi, yarıda kesildi) 1 ve 2 sn bekleyerek iki kez yeniden denenir; sertifika hataları ve zaman aşımları yeniden denenmez. |
+| Cevap yerine "model sunucusuna bağlanılamadı" / "zamanında cevap vermedi" / "isteği reddetti" | Sırasıyla: ağ ve Ayarlar'daki sunucu adresi; sunucunun yoğunluğu; API anahtarı. Bir model sunucusu (sohbet, Hızlı, görsel model, embedding, reranker) bir isteğe **15 dakika** boyunca hiçbir şey göndermezse istek zaman aşımına düşer: kuyrukta bekleme, ilk kelimeden önce istemin okunması ve akan bir cevapta iki parça arasındaki sessizlik bu süreye girer; akış sürdükçe cevabın toplam süresi sınırsızdır. Bağlanma ayrıca en çok 10 sn beklenir (ulaşılamayan sunucu hemen bildirilir); Ayarlar'daki "Test et" / "Modelleri getir" kısa sürede sonuç verir. Süre `config.yaml`'da her sunucu için `timeout` (saniye) ile değiştirilebilir. Embedding ve reranker isteklerinde anlık bir bağlantı kopması (bağlantı reddedildi, yarıda kesildi) 1 ve 2 sn bekleyerek iki kez yeniden denenir; sertifika hataları ve zaman aşımları yeniden denenmez. |
 
 ### HTTPS sertifika hataları (`SSL: CERTIFICATE_VERIFY_FAILED`)
 

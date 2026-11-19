@@ -1,5 +1,42 @@
 ## Süreç Uzmanı — Windows masaüstü uygulaması
 
+### 0.2.0 — 15 dakika bekleme, anında Durdur, kurum ayarlarıyla ortak API anahtarı, tek token ölçüsü
+Sayısal Tasarım Uzmanı'nın 0.15.4, 0.15.5 ve 0.15.6 sürümlerindeki değişiklikler Süreç Uzmanı'na alındı. Süreç
+Uzmanı'nın kendi sürüm numaraları ayrıdır: üç değişiklik birlikte 0.2.0'dır. 0.15.4 ve 0.15.5'in karşılığı olan ayrı
+sürümler Süreç Uzmanı'nda yayınlanmadı; değişiklikleri bu sürümdedir. Uygulamaya özgü adlar aynı kaldı
+(`SurecUzmani.kurum-ayarlari.yaml`, `SurecUzmani.kurum.txt`, `SURECUZMANI_*` ortam değişkenleri).
+- **Model sunucularına 15 dakika:** sohbet, Hızlı, görsel model, embedding ve reranker için bekleme süresi 5 dakikadan
+  15 dakikaya çıktı. Bu, sunucunun hiçbir şey göndermeden kalabileceği süredir: kuyrukta bekleme, ilk kelimeden önce
+  uzun istemin okunması, akan cevapta duraklama. Akan bir cevabın toplam süresi yine sınırsızdır. Bağlanma en çok
+  10 sn beklenir; "Test et" ve "Modelleri getir" kısa sürede sonuç verir. 0.1.0'ın kaydettiği kurum ayarları ve kişisel
+  ayarlardaki eski varsayılan (300 sn) 15 dakika olarak okunur; bilerek seçilmiş başka bir değer korunur.
+- **Durdur, sunucu yoğunken de hemen durdurur:** sunucu henüz hiçbir şey göndermiyorken (kuyruk, uzun istem) Durdur'a
+  basılınca düğme "Durduruluyor…" yazıp takılıyordu. Artık bağlantı soket düzeyinde kesilir: cevap hemen durur ve
+  sunucu isteğin gittiğini görür. Durdurmanın kestiği bir akış hatasız bitse de yarım metin cevap sayılmaz.
+- **Ortak API anahtarı kurum ayarlarıyla herkese:** Admin › Ayarlar › Kurum ayarları'nda **"Ortak API anahtarını da
+  kurum ayarlarına yaz"** (varsayılan işaretli). Anahtar `SurecUzmani.kurum-ayarlari.yaml` dosyasına **düz metin**
+  yazılır: klasörü okuyabilen herkes görebilir, klasörün okuma iznini yalnızca uygulamayı kullananlara açın.
+  Kullanıcılar anahtar girmeden başlar. Kurum anahtarı kullanıcının ayar dosyasına hiç yazılmaz (yalnızca değiştiğini
+  anlamaya yetecek bir parmak izi); klasöre ulaşılamayan günler için bilgisayarda tutulan kopyada anahtar şifrelidir
+  (Windows'ta DPAPI, başka sistemlerde yalnızca sahibinin okuyabildiği dosya).
+- **Kilit (🔒):** Ayarlar'daki ortak API anahtarı alanı, anahtar varken kilitli ve maskeli durur; kazayla değiştirilmesin
+  diye. Kilide tıklayan herkes açabilir (🔓); kaydedince yeniden kilitlenir. Alanın altında anahtarın kaynağı yazar
+  ("kurum ayarlarından" / "bu bilgisayarda değiştirildi"). Kullanıcının değiştirdiği anahtar yalnızca o bilgisayarda
+  geçerlidir; **Kurum anahtarına dön** bağlantısıyla ya da alanı boşaltıp kaydederek kurum anahtarına dönülür.
+  Yönetici kurum anahtarını sonradan değiştirirse yeni anahtar herkese geçer (en yeni karar geçerli kuralı).
+- **Kullanım günlüğü — tek token ölçüsü:** **toplam token** artık modellerin bir soru için ürettiği metindir (düşünme
+  dahil). Cevabın altındaki **Süre** dökümünde de aynı sayı **"Toplam: … token (düşünme dahil)"** olarak görünür.
+  Eskiden toplam, her model çağrısına giden istem token'larını da topluyordu; araç turlarında aynı pasajlar tekrar
+  tekrar sayıldığı için çok büyük çıkıyordu. Admin › Kullanım günlüğü tablosu: Kullanıcı | Soru | Toplam token |
+  **Soru başına ortalama** | Son soru.
+- **CSV:** istem, üretilen ve düşünme token sütunları kalktı; `toplam_token` yeni ölçüdür. 0.1.0'ın yazdığı bir dosya, o
+  kullanıcının bir sonraki sorusunda bir kez dönüştürülür: önce `<kullanıcı>.csv.yedek` kopyası bırakılır (daha önce
+  alınmış bir yedeğin üzerine yazılmaz), eski satırlar yeni ölçüye çevrilir, dosya tek seferde yazılır. Dosya Excel'de
+  açıksa dönüştürme sonraki soruya kalır; satır eski biçimde eklenir, sütunlar kaymaz, yedek birikmez.
+- Doğrulanan: bütün testler (yeni: `test_timeouts.py`, `test_shared_key.py`, Durdur için gerçek bağlantılı test,
+  kullanım günlüğü dönüştürme testleri, kilit ve kullanım tablosu için tarayıcı testleri). Durdur ayrıca HTTPS
+  bağlantıyla da denendi. Gerçek bir Windows makinesinde elle denenmedi.
+
 ### 0.1.0 — ilk sürüm
 Süreç Uzmanı'nın ilk sürümü. Sayısal Tasarım Uzmanı 0.15.3'ün kaynak kodundan başlatıldı; arama, cevaplama,
 doğrulama ve arayüz aynen devralındı.
