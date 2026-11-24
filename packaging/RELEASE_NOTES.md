@@ -1,5 +1,37 @@
 ## Süreç Uzmanı — Windows masaüstü uygulaması
 
+### 0.3.0 — Admin yetkisi kullanıcı adına göre; Düşünme ve aramalar Ayarlar'da
+Sayısal Tasarım Uzmanı'nın 0.15.7 sürümündeki değişiklik Süreç Uzmanı'na alındı (Süreç Uzmanı'nın kendi numarasıyla
+0.3.0). Uygulamaya özgü adlar aynı kaldı (`SurecUzmani.kurum-ayarlari.yaml`, `SURECUZMANI_*` ortam değişkenleri).
+- **Admin yetkisi:** Admin › Ayarlar › Kurum ayarları'nda yeni alan: **"Admin yetkisi olan kullanıcı adları"** (her
+  satıra bir ad). Kurum ayarları kaydedilince `SurecUzmani.kurum-ayarlari.yaml` dosyasına `admins:` olarak yazılır ve
+  herkesin uygulaması açılışta okur. Listede olmayan kullanıcıda **Admin düğmesi 🔒 kilitli ve tıklanamaz**; üzerine
+  gelince "Admin yetkiniz yok. Yetki için yöneticinize başvurun." yazar. Kilitli olanlar Admin'in dört sekmesinin
+  hepsi: Ortak kütüphane, Ayarlar, Değerlendirme, Kullanım günlüğü.
+- **Liste boşsa herkes Admin'i kullanır** (0.2.0'a kadar olduğu gibi): bu sürümü dağıtmak kimseyi kilitlemez; kilit,
+  yönetici listeye ad yazıp kurum ayarlarını kaydettiğinde başlar. Kendi adınız listede yoksa liste kaydedilmez
+  (kendinizi kilitlememeniz için); alanın altında sizin kullanıcı adınız yazar.
+- **Kullanıcı tanıma:** uygulamanın çalıştığı Windows hesabının adı (Windows'a sorulur, `USERNAME` ortam değişkenine
+  bakılmaz). Alan adı ve büyük-küçük harf dikkate alınmaz (`ŞİRKET\ahmet` = `ahmet@sirket.local` = `Ahmet`). Liste
+  yalnızca kurum ayarları dosyasından gelir (klasöre ulaşılamayan günlerde son okunan kopyasından); kullanıcının kendi
+  ayarları listeyi değiştiremez.
+- **Sunucu da denetler:** listede olmayan kullanıcının Admin işlemleri (ortak kütüphane, Admin › Ayarlar, kurum
+  ayarlarını kaydetme, değerlendirme, kullanım günlüğü) reddedilir. Ayarlar penceresinden yalnızca o pencerenin
+  ayarları değiştirilebilir.
+- **Ayarlar penceresi herkese açık kalır.** **Düşünme ve aramalar** artık Admin'in bir sekmesi değil, Ayarlar
+  penceresinin en altında; herkes kendi sorularının düşünmesini ve aranan belgeleri görebilir.
+- **Admin dışında da:** listede olmayan kullanıcıya "Eksik belgeleri kaldır" bağlantısı, "eski indeks" bandındaki
+  Admin yönlendirmesi ve indeksleme kutusunda iş bitince çıkan **"Kalite raporunu aç"** düğmesi gösterilmez. Bu düğme
+  kişisel dosyalar indekslenince de çıkıyordu ve Admin'e ait kalite raporunu açıyordu (Süreç Uzmanı'nda ayrıca
+  yapıldı).
+- Bu kilit, ortak ayarların yetkisiz ya da kazayla değiştirilmesini önler; bilerek aşmaya çalışana karşı bir duvar
+  değildir. Ortak kütüphaneyi ve kurum ayarları dosyasını asıl koruyan, o klasörlere kimin yazabildiğidir.
+- Doğrulanan: bütün testler (ad eşleştirme: alan adı, büyük-küçük harf, Türkçe İ; liste boşken herkes; listede
+  olan/olmayan; listeyi yalnızca kurum dosyasının vermesi; klasöre ulaşılamayınca listenin yerel kopyadan gelmesi;
+  listede olmayana Admin işlemlerinde 403, Ayarlar penceresinin ayarlarına izin; kendini kilitleyen listenin
+  kaydedilmemesi; kilitli düğme, ipucu metni, Türkçe/İngilizce; Düşünme ve aramalar'ın Ayarlar'da olması; kalite
+  raporu düğmesinin yalnızca admin'e çıkması). Gerçek bir Windows makinesinde ve etki alanı hesabıyla elle denenmedi.
+
 ### 0.2.0 — 15 dakika bekleme, anında Durdur, kurum ayarlarıyla ortak API anahtarı, tek token ölçüsü
 Sayısal Tasarım Uzmanı'nın 0.15.4, 0.15.5 ve 0.15.6 sürümlerindeki değişiklikler Süreç Uzmanı'na alındı. Süreç
 Uzmanı'nın kendi sürüm numaraları ayrıdır: üç değişiklik birlikte 0.2.0'dır. 0.15.4 ve 0.15.5'in karşılığı olan ayrı

@@ -247,7 +247,10 @@ başkasına verince ayarlar onunla gitmez. Bunun için ayarlar bir kez **ortak b
    varsayılan işaretli), kullanım günlüğü klasörü ve **"Ortak API anahtarını da kurum ayarlarına yaz"** işaretliyse
    (varsayılan işaretli) **ortak API anahtarı**. Anahtar dosyaya **düz metin** olarak yazılır: klasörü okuyabilen
    herkes görebilir, bu yüzden klasörün okuma iznini yalnızca uygulamayı kullanacak kişilere açın. **Kişisel klasörler
-   yazılmaz.** Dosya yarım kalmayacak şekilde yazılır; o klasöre yazma izniniz olmalıdır.
+   yazılmaz.** **"Admin yetkisi olan kullanıcı adları"** alanına (her satıra bir ad) yazılan kullanıcılar Admin'i
+   kullanabilir; boş bırakılırsa herkes (bkz. 3.6). Kendi adınız listede yoksa kaydedilmez (kendinizi kilitlememeniz
+   için); alanın altında sizin kullanıcı adınız yazar. Dosya yarım kalmayacak şekilde yazılır; o klasöre yazma
+   izniniz olmalıdır.
 3. Aynı anda exe'nin yanına bu klasörü gösteren `SurecUzmani.kurum.txt` bırakılır. Exe'yi dağıtırken bu
    dosyayı da verin: zip sürümünde klasörün içinde kalır; portable exe'yi bu dosyayla aynı klasörde verin; exe ağ
    klasöründen çalıştırılıyorsa bir şey yapmanız gerekmez. Exe'nin klasörüne yazılamıyorsa uygulama dosyanın adını
@@ -378,7 +381,7 @@ bekleme (`max_retries`, `max_retry_wait`). Eşzamanlılık sınırlıdır (`embe
 
 ### 3.3 İndeksleme kalite raporu
 
-**Admin › Ortak kütüphane › İndeksleme kalite raporu** (veya indeksleme bittiğinde iş kutusundaki "Kalite raporu")
+**Admin › Ortak kütüphane › İndeksleme kalite raporu** (veya indeksleme bittiğinde iş kutusundaki "Kalite raporu"; Admin yetkisi olanlara)
 raporu açar. Rapor
 indekste kalıcıdır (yeniden açılışta kaybolmaz) ve **indekslemenin ne yaptığını** anlatır; cevap doğruluğu ölçüsü
 değildir.
@@ -517,8 +520,30 @@ ortak kütüphane salt-okunur açılmış olsa da çalışır.
 
 ### 3.6 Admin
 
-Üst çubuktaki **Admin** düğmesi herkese açık bir pencere açar (yetki kontrolü yok; normal bir sorunun gerektirmediği
-her şey burada toplanır):
+Üst çubuktaki **Admin** düğmesi, normal bir sorunun gerektirmediği her şeyin toplandığı pencereyi açar (dört sekme:
+Ortak kütüphane, Ayarlar, Değerlendirme, Kullanım günlüğü).
+
+**Admin yetkisi (0.3.0):** Admin'i kimlerin kullanabileceği kurum ayarlarında yazar (bkz. 2.4, "Admin yetkisi olan
+kullanıcı adları"). Liste boşsa ya da kurum ayarı yoksa herkes kullanır (0.2.0'a kadar olduğu gibi); yeni sürümü
+dağıtmak kimseyi kilitlemez. Listede olmayan bir kullanıcıda Admin düğmesi **🔒 kilitli** ve tıklanamaz durur; üzerine
+gelince "Admin yetkiniz yok. Yetki için yöneticinize başvurun." yazar. **Ayarlar** penceresi (API anahtarı, sohbet
+modelleri, tema, bildirim, kişisel dosyalar, düşünme ve aramalar) herkese açık kalır.
+* Kullanıcı, uygulamanın çalıştığı **Windows hesabının adıyla** tanınır (Windows'a sorulur; `USERNAME` ortam değişkenine
+  bakılmaz). Alan adı ve büyük-küçük harf dikkate alınmaz: `ŞİRKET\ahmet`, `ahmet@sirket.local` ve `Ahmet` aynı
+  kişidir. Başka bir bilgisayardaki aynı adlı yerel hesap da aynı kişi sayılır.
+* Liste yalnızca kurum ayarları dosyasından (klasöre ulaşılamayan günlerde onun son okunan kopyasından) gelir;
+  kullanıcının kendi ayarları, `config.yaml` veya ortam değişkenleri listeyi değiştiremez.
+* Kontrol sunucu tarafında da yapılır: listede olmayan bir kullanıcının Admin işlemleri (ortak kütüphane, Admin ›
+  Ayarlar'daki ayarlar, kurum ayarlarını kaydetme, değerlendirme, kullanım günlüğü) reddedilir. Ayarlar penceresinden
+  yalnızca o pencerenin ayarları değiştirilebilir.
+* Admin'in dışında Admin işlemine götüren yerler de listede olmayan kullanıcıya gösterilmez: eksik belgeler bandındaki
+  **Eksik belgeleri kaldır** bağlantısı, "eski indeks" bandındaki Admin yönlendirmesi ve indeksleme kutusunda iş
+  bitince çıkan **Kalite raporunu aç** düğmesi (kişisel dosyalar indekslenince de çıkar; kalite raporu Admin'indir).
+* Bu, ortak ayarların yetkisiz ya da kazayla değiştirilmesini önler. Uygulama kullanıcının kendi bilgisayarında, kendi
+  hesabıyla çalıştığı için bunu bilerek aşmaya çalışan birine karşı bir duvar değildir: ortak kütüphaneyi ve kurum
+  ayarları dosyasını asıl koruyan, o klasörlere kimin yazabildiğidir (klasör izinlerini buna göre verin).
+
+Sekmeler:
 
 * **Ayarlar:** görsel model (VLM), embedding ve reranker sunucuları; cevaplama (düşünme, araç kullanımı, denetçi,
   düzeltme, doğrulanamayan ifadeler, görsel model açık/kapalı); gelişmiş ayarlar; bağlantı güvenliği. Kendi
@@ -535,8 +560,6 @@ her şey burada toplanır):
   tekrar indekslenir (embedding'ler yeniden hesaplanır, VLM sonuçları önbellekten gelir). Aynı dosya "Belge ekle"
   ile bilerek yeniden eklenirse kaldırılmışlıktan çıkar. Kaldırma kaydı indeksin içindedir (`excluded` tablosu;
   eski kütüphaneler açılışta yerinde güncellenir, mevcut kayıtlara dokunulmaz).
-* **Düşünme ve aramalar:** bu oturumdaki sorular; her birinin altında açılır-kapanır **Düşünme** (modelin düşünme
-  metni) ve **Aranan belgeler** (araç çağrıları ve modele verilen kaynaklar, atıf yapılanlar işaretli).
 * **Değerlendirme:** soru setlerini çalıştırma ve raporlar (bkz. 5).
 * **Kullanım günlüğü:** her soru, soranın **Windows kullanıcı adı** ve bilgisayar adıyla, sorunun kendisi, sonucu,
   süresi, **toplam token** (modellerin o soru için ürettiği metin, düşünme dahil; cevabın altındaki **Süre** dökümündeki
@@ -640,8 +663,10 @@ her şey burada toplanır):
   hemen yanındadır; paragraftaki her ifade ayrı ayrı doğrulanır (paragraf sonundaki tek atıf önceki ifadeleri
   doğrulamaz). Kaynakta yazan bilgi ile mühendislik yorumu ayrı bölümlerde kalır.
 * **Cevap akışı:** taslak, "doğrulanmamış" etiketli katlanmış bir alanda ilerleme olarak görünür. Modelin
-  düşünmesi, kapsam satırı, araç çağrıları ve aranan belgeler sohbette gösterilmez; **Admin › Düşünme ve
-  aramalar** sekmesinde, bu oturumdaki her soru için açılır-kapanır bölümlerde durur. Doğrulama bitince yalnızca doğrulanmış ifadelerden
+  düşünmesi, kapsam satırı, araç çağrıları ve aranan belgeler sohbette gösterilmez; **Ayarlar** penceresinin en
+  altındaki **Düşünme ve aramalar** bölümünde (0.2.0'a kadar Admin'in bir sekmesiydi), bu oturumdaki her soru için
+  açılır-kapanır bölümlerde durur: **Düşünme** (modelin düşünme metni) ve **Aranan belgeler** (araç çağrıları ve modele
+  verilen kaynaklar, atıf yapılanlar işaretli). Doğrulama bitince yalnızca doğrulanmış ifadelerden
   kurulan son cevap gösterilir. Kaynak listesi (atıf düğmeleri) de cevapla birlikte gelir; cevap yazılırken bulunan
   kaynaklar tek tek eklenmez. Cevap gelince sohbet, sonuna değil **cevabın başladığı yere** kaydırılır; kayıtlı bir
   sohbet açıldığında da son cevabın başı gösterilir.
