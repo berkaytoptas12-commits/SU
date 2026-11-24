@@ -749,6 +749,30 @@ def test_admin_names_the_admins_in_the_organization_settings(ui, tmp_path, monke
     assert not ui.is_disabled("#btn-admin")
 
 
+def test_the_quality_report_button_after_indexing_is_only_for_an_admin(ui, tmp_path, monkeypatch):
+    """Süreç Uzmanı: the indexing box also reports the personal indexing everyone runs; its "Kalite raporunu aç" opens
+    Admin's quality report, which the server refuses to the others, so only an admin gets the button."""
+    from techrag import admins
+
+    _org_admins(tmp_path, monkeypatch, ["boss"], "veli")
+    ui.evaluate("() => loadInfo()")
+    ui.wait_for_function("() => document.querySelector('#btn-admin').disabled")
+    picked = tmp_path / "picked"
+    picked.mkdir()
+    for n, who in ((1, "veli"), (2, "boss")):
+        monkeypatch.setattr(admins, "current", lambda who=who: who)
+        ui.evaluate("() => loadInfo()")
+        ui.wait_for_function(f"() => document.querySelector('#btn-admin').disabled === {str(who == 'veli').lower()}")
+        f = picked / f"notlarim{n}.md"
+        f.write_text(f"# Notlarım {n}\n\nThe ZQX{n} probe ground spring must be shorter than 5 mm.\n", encoding="utf-8")
+        ui.evaluate("() => { document.querySelector('#job-title').textContent = ''; }")
+        ui.set_input_files("#personal-file-input", str(f))
+        # the title and the report (with or without the button) are written in the same step
+        ui.wait_for_function("() => document.querySelector('#job-title').textContent === 'İndeksleme bitti'",
+                             timeout=30000)
+        assert ui.locator("#btn-job-quality").count() == (1 if who == "boss" else 0), who
+
+
 def test_personal_files_are_chosen_from_the_computer(ui, tmp_path, cfg):
     groups = ui.evaluate("() => [...document.querySelectorAll('.src-group .src-toggle')].map((h) => h.textContent)")
     assert groups == ["Ortak", "Kişisel"]

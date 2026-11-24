@@ -2043,9 +2043,11 @@ async function followJob(job, title) {
     $("#job-now").textContent = t("reportLine", (r.added || []).length, (r.updated || []).length, r.unchanged || 0,
       (r.reused || []).length, (r.missing || []).length, (r.unreachable || []).length, Object.keys(r.failed || {}).length);
     const failed = Object.entries(r.failed || {});
+    // The quality report is Admin's (the server refuses it to the others): its button only for an admin. This box also
+    // reports the personal indexing everyone runs.
     $("#job-errors").innerHTML = failed.slice(0, 20).map(([k, v]) => `<div title="${esc(v)}">✕ ${esc(k.replace(/^@\d+\//, ""))}</div>`).join("")
-      + `<button type="button" class="ghost small" id="btn-job-quality">${esc(t("qOpenReport"))}</button>`;
-    $("#btn-job-quality").addEventListener("click", openQuality);
+      + (isAdmin() ? `<button type="button" class="ghost small" id="btn-job-quality">${esc(t("qOpenReport"))}</button>` : "");
+    if (isAdmin()) $("#btn-job-quality").addEventListener("click", openQuality);
   } else if (j.status === "failed") {
     $("#job-errors").textContent = j.messages.slice(-1)[0] || "";
   }
